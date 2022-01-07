@@ -14,8 +14,8 @@ Definition action_from (a : action) := let : Action p0 _ _ := a in p0.
 Definition action_to (a : action) := let : Action _ p1 _ := a in p1.
 Definition action_ch (a : action) := let : Action _ _ c := a in c.
 
-Definition II_rel (a0 a1 : action) := (action_from a0 == action_from a1) && (action_ch a0 != action_ch a1).
-Definition IO_rel (a0 a1 : action) := (action_to a0 == action_from a1) && (action_ch a0 != action_ch a1).
+Definition II_rel (a0 a1 : action) := (action_to a0 == action_to a1).
+Definition IO_rel (a0 a1 : action) := (action_to a0 == action_from a1).
 Definition OO_rel (a0 a1 : action) := (action_from a0 == action_from a1) && (action_ch a0 == action_ch a1).
 
 Definition OO_IO_rel (a0 a1 : action) := OO_rel a0 a1 || IO_rel a0 a1.
@@ -55,25 +55,28 @@ if sub_seqs_from nil (path_btw l0 l1) is x::l then l else [::].
 
 Eval compute in (paths_btw ([:: 0 ; 1 ;2]) ([:: 0; 1 ; 2 ; 4 ; 5; 6])). 
 
-Definition in_dep (l l' : seq nat) (g : gType U) := 
+Variable (f : seq nat -> option action).
+Definition in_dep (l l' : seq nat) := 
   existsb (fun (ls : seq (seq nat)) => if ls is ll::ls' 
-                                    then path (fun l0 l1 => l0 ≺[OO_IO_rel] l1 ∈ Tr^g) l (belast ll ls') 
-                                         && ((last ll ls') ≺[II_rel] l' ∈ Tr^g)
-                                    else l ≺[II_rel] l' ∈ Tr^g)  (paths_btw l l').
+                                    then path (fun l0 l1 => l0 ≺[OO_IO_rel] l1 ∈ f) l (belast ll ls') 
+                                         && ((last ll ls') ≺[II_rel] l' ∈ f)
+                                    else l ≺[II_rel] l' ∈ f)  (paths_btw l l').
 
-Definition InDep  (l l' : seq nat) (g : gType U) := 
-(exists ls l,  path (fun l0 l1 => l0 ≺[IO_rel] l1 ∈ Tr^g) l (rcons ls l) && (l ≺[II_rel] l' ∈ Tr^g)).
+Definition InDep  (l l' : seq nat) := 
+(exists ls l,  path (fun l0 l1 => l0 ≺[IO_rel] l1 ∈ f) l (rcons ls l) && (l ≺[II_rel] l' ∈ f)).
 
-Lemma in_depP : forall l l' G, reflect (InDep l l' G) (in_dep l l' G).
+Lemma in_depP : forall l l', reflect (InDep l l') (in_dep l l').
 Proof. Admitted.
 
-Definition out_dep (l l' : seq nat) (g : gType U) := 
-  existsb (fun (ls : seq (seq nat)) => path (fun l0 l1 => l0 ≺[OO_IO_rel] l1 ∈ Tr^g) l (rcons ls l'))  (paths_btw l l').
+Definition out_dep (l l' : seq nat) := 
+  existsb (fun (ls : seq (seq nat)) => path (fun l0 l1 => l0 ≺[OO_IO_rel] l1 ∈ f) l (rcons ls l'))  (paths_btw l l').
 
-Definition OutDep (l l' : seq nat) (G : gType U) :=  (exists ls,  path (fun l0 l1 => l0 ≺[OO_IO_rel] l1 ∈ Tr^G) l (rcons ls l')).
+Definition OutDep (l l' : seq nat) :=  (exists ls,  path (fun l0 l1 => l0 ≺[OO_IO_rel] l1 ∈ f) l (rcons ls l')).
 
-Lemma out_depP : forall l l' G, reflect (OutDep l l' G)  (out_dep l l' G).
+Lemma out_depP : forall l l', reflect (OutDep l l')  (out_dep l l').
 Proof. Admitted.
+
+Definition in_out_dep (l l' : seq nat) := in_dep l l' && out_dep l l'.
 End Order.
 
 (*repeat notation to use outside of section*)
@@ -147,10 +150,12 @@ Section Folding.
 Variable (U : eqType).
 
 (*Maybe off by one error*)
-Definition folding_of (g : gType U) (label : seq nat) :=
- if rotr 2 (trace_of g label) is i::i'::_ then 
+Definition folding_of_aux (trace : seq nat) (label : seq nat) :=
+ if rotr 2 trace is i::i'::_ then 
   Some (take ((size label)-i) label ++ drop ((size label)-i') label)
   else None.
+
+Definition folding_of (g : gType U) l := folding_of_aux (trace_of g l) l.
 
 Variant folding_of_spec : gType U -> seq nat -> seq nat -> option (seq nat) -> option (seq nat) -> Prop :=
  FoldingOfSpec l0 l1 l2 l3 R g : l0 ≺[R] l1 ∈ Tr^g -> l2 ≺[R] l3 ∈ Tr^g -> folding_of_spec g l0 l1 (Some l2) (Some l3).
@@ -179,7 +184,7 @@ Variable (U : eqType).
 (*This doesn't apply linearity to carried global types*)
 Definition same_ch (a0 a1 : action) := action_ch a0 == action_ch a1.
 Definition Linear (g : gType U) := 
-forall l0 l1, (l0 ≺[same_ch] l1 ∈ Tr^g) -> in_dep l0 l1 g /\ out_dep l0 l1 g.
+forall l0 l1, (l0 ≺[same_ch] l1 ∈ Tr^g) -> in_out_dep Tr^g l0 l1.
 
 (*tree_of (unfold_i i g) is a function with finite domain, maybe define it as a finfun
   with domain as some finite subset of lists 
@@ -187,38 +192,44 @@ forall l0 l1, (l0 ≺[same_ch] l1 ∈ Tr^g) -> in_dep l0 l1 g /\ out_dep l0 l1 g
 *)
 
 (*unfolding more preserves order and relation R*)
-Lemma unfold_ps_order : forall l0 l1 (G : gType U) R n k, l0 \in Tr^G[n] -> l1 \in Tr^G[n] -> l0 ≺[R] l1 ∈ Tr^G[n+k] -> l0 ≺[R] l1 ∈ Tr^G[n].
+Lemma unfold_ps_order : forall l0 l1 (G : gType U) R n, 
+l0 \in Tr^G[n] -> l1 \in Tr^G[n] -> l0 ≺[R] l1 ∈ Tr^G[n.+1] -> l0 ≺[R] l1 ∈ Tr^G[n].
 Proof. Admitted.
 
-Lemma in_dep_ps : forall l0 l1 (g : gType U) n k, in_dep l0 l1 g[n] -> l0 \in Tr^g[n] -> l1 \in Tr^g[n] -> in_dep l0 l1 g[n+k].
+Lemma in_out_dep_ps : forall l0 l1 (g : gType U) n,  l0 \in Tr^g[n] -> l1 \in Tr^g[n] -> in_out_dep Tr^g[n] l0 l1 -> in_out_dep Tr^g[n.+1] l0 l1.
 Proof. Admitted.
 
-Lemma out_dep_ps : forall l0 l1 (g : gType U) n k, out_dep l0 l1 g[n] -> l0 \in Tr^g[n] -> l1 \in Tr^g[n] -> out_dep l0 l1 g[n+k].
-Proof. Admitted.
+(*Lemma out_dep_ps : forall l0 l1 (g : gType U) n,  l0 \in Tr^g[n] -> l1 \in Tr^g[n] -> out_dep Tr^g[n] l0 l1 -> out_dep Tr^g[n.+1] l0 l1.
+Proof. Admitted.*)
 
 Lemma linear_le : forall n k (g : gType U), Linear g[n+k+1]  -> Linear g[n+1].
 Proof. Admitted.
 
 Lemma case_order : forall l1 l2 n (g : gType U), l1 ≺[same_ch] l2 ∈ Tr^g[n.+2] -> 
-  l1 \in Tr^g[n.+1] /\ l2 \in Tr^g[n.+1] /\  l1 ≺[same_ch] l2 ∈ Tr^g[n.+2] \/ 
+  l1 \in Tr^g[n.+1] /\ l2 \in Tr^g[n.+1] \/ 
   l1 \in Tr^g[n.+1]\g[n] /\ l2 \in Tr^g[n.+2]\g[n.+1] \/ 
   (exists i, l1 \in Tr^g[n-i]) /\ l2 \in Tr^g[n.+2]\g[n.+1].
 Proof.
 Admitted.
 
-Lemma linear1_n1 : forall n (g : gType U), Linear g[1]  -> Linear g[n+1].
+Lemma claimA : forall (n1 n2 n1' n2' : seq nat) (f : seq nat -> option action), n1 \in f -> n2 \in f -> n1' \in f -> n2' \in f -> 
+in_out_dep f n1 n2  <-> in_out_dep f n1' n2'.
+Proof. Admitted.
+
+Lemma claimB : forall (n n': seq nat) (g : gType U), folding_of g n = Some n' -> in_out_dep Tr^g n' n.
+Proof. Admitted.
+
+Lemma linear1_n1 : forall n (g : gType U), Linear g[1]  -> Linear g[n.+1].
 Proof. 
 induction n. 
 - intros. done. 
 - intros. apply IHn in H. unfold Linear.  
-  move => n1 n2. rewrite addn1. move/case_order. case.  
- + move => [] + []. rewrite -{3}addn1.  intros. move : (unfold_ps_order a a0 b).
-   unfold Linear in H. rewrite -addn1. move/H. 
-   case. intros. rewrite -addn1. split.
-  * apply in_dep_ps. done. by rewrite addn1. by rewrite addn1.
-  * apply out_dep_ps. done. by rewrite addn1. by rewrite addn1. 
- + case.
-  * case. Admitted.
+  move => n1 n2. move => a; move:  (case_order a). case.  
+ + move => [] + []. move => n1in n2in. move : (unfold_ps_order n1in n2in a).
+   unfold Linear in H. move/H. case. auto using in_out_dep_ps. 
+ + case. case. intros. eapply claimA.
+
+ +
 
 (*
 move/folding_exists. case. move=> n1' Hf1.

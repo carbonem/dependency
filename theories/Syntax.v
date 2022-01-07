@@ -13,13 +13,13 @@ Inductive ptcp  : Set :=
   | Ptcp : nat   -> ptcp .
 
 Definition nat_of_ptcp (p : ptcp) := let: Ptcp n := p in n.
-Canonical ptctp_newType := Eval hnf in [newType for nat_of_ptcp]. Locate SubEqMixin.
+Canonical ptctp_newType := Eval hnf in [newType for nat_of_ptcp]. 
 Definition ptcp_eqMixin := [eqMixin of ptcp by <:]. 
 Canonical ptcp_eqType := Eval hnf in EqType ptcp ptcp_eqMixin.
-(*Definition ptcp_choiceMixin := [choiceMixin of ptcp by <:].
+Definition ptcp_choiceMixin := [choiceMixin of ptcp by <:].
 Canonical ptcp_ChoiceType := Eval hnf in ChoiceType ptcp ptcp_choiceMixin.
 Definition ptcp_countMixin := [countMixin of ptcp by <:].
-Canonical ptcp_countType := CountType ptcp ptcp_countMixin.*)
+Canonical ptcp_countType := CountType ptcp ptcp_countMixin.
 
 
 Inductive ch  : Set :=
@@ -29,10 +29,10 @@ Definition nat_of_ch (c : ch) := let: Ch n := c in n.
 Canonical ch_newType := Eval hnf in [newType for nat_of_ch].
 Definition ch_eqMixin := [eqMixin of ch by <:]. 
 Canonical ch_eqType := Eval hnf in EqType ch ch_eqMixin. 
-(*Definition ch_choiceMixin := [choiceMixin of ch by <:].
+Definition ch_choiceMixin := [choiceMixin of ch by <:].
 Canonical ch_ChoiceType := Eval hnf in ChoiceType ch ch_choiceMixin.
 Definition ch_countMixin := [countMixin of ch by <:].
-Canonical ch_countType := CountType ch ch_countMixin.*)
+Canonical ch_countType := CountType ch ch_countMixin.
 
 
 Inductive action  : Set := Action of ptcp & ptcp & ch.
@@ -42,45 +42,78 @@ Definition action_indDef := [indDef for action_rect].
 Canonical action_indType := IndType action action_indDef.
 Definition action_eqMixin := [derive eqMixin for action].
 Canonical action_eqType := EqType action action_eqMixin.
-(*Definition action_choiceMixin := [derive choiceMixin for action].
+Definition action_choiceMixin := [derive choiceMixin for action].
 Canonical action_choiceType := ChoiceType action action_choiceMixin.
 Definition action_countMixin := [derive countMixin for action].
-Canonical action_countType := CountType action action_countMixin.*)
-
-
-Section Label.
-Variable (U:Set).
-Inductive label : Set := 
- | LV : action -> U -> label
- | LN : action -> nat -> label.
-
-Definition in_action (a : action) := fun p => let: (Action p0 p1 _) := a in (p == p0) || (p == p1).
-
-Definition pred_of_label (l : label) := fun (p : ptcp) =>
-match l with
- | LV a _ => in_action a p
- | LN a _ => in_action a p
-end.  
-
-Canonical label_predType := PredType (pred_of_label : label -> pred ptcp).
-End Label.
-
+Canonical action_countType := CountType action action_countMixin.
 
 Section GlobalType.
-Variable (U : eqType).
+Variable (U : countType).
 
 Unset Elimination Schemes.
 Inductive gType  :=
-  | var_gType : nat -> gType
+  | GVar : nat -> gType
   | GEnd : gType
   | GRec : gType -> gType
   | GMsg : action -> U -> gType-> gType
   | GBranch : action  -> seq gType -> gType
   | GPar : gType -> gType -> gType.
-
-(*From Francisco*)
 Set Elimination Schemes. 
-Lemma gType_ind :
+
+Section Elimination.
+
+Variables (Pg : gType -> Type) 
+          (P_glist : seq gType -> Type).
+
+Hypothesis Pg_var : (forall n : nat, Pg (GVar n)).
+Hypothesis Pg_end : Pg GEnd.
+Hypothesis Pg_rec : (forall g : gType, Pg g -> Pg (GRec g)).
+Hypothesis Pg_msg : (forall (a : action) (u : U) (g : gType), Pg g -> Pg (GMsg a u g)).
+Hypothesis Pg_branch : (forall (a : action) (l : seq gType), P_glist l  -> Pg (GBranch a l)).
+Hypothesis Pg_par : (forall g : gType, Pg g -> forall g0 : gType, Pg g0 -> Pg (GPar g g0)).
+
+Hypothesis P_glist_0 : P_glist nil.
+Hypothesis P_glist_cons : forall g, Pg g -> forall l, P_glist l -> P_glist (g::l).
+
+Definition gType_rect : forall g, Pg g :=
+fix gType_rect g :=
+  let fix seq_gType_rect gs : P_glist gs := 
+    match gs with 
+     | [::] => P_glist_0
+     | g'::gs' => P_glist_cons (gType_rect g') (seq_gType_rect gs') 
+     end in
+  match g with 
+   | GVar n => Pg_var n
+   | GEnd => Pg_end
+   | GRec g => Pg_rec (gType_rect g)
+   | GMsg a u g => Pg_msg a u (gType_rect g)
+   | GBranch a l => Pg_branch a (seq_gType_rect l)
+   | GPar g0 g1 => Pg_par (gType_rect g0) (gType_rect g1)
+   end.
+
+Definition seq_gType_rect : forall gs, P_glist gs :=
+ fix seq_gType_rect gs : P_glist gs := 
+    match gs with 
+     | [::] => P_glist_0
+     | g'::gs' => P_glist_cons (gType_rect g') (seq_gType_rect gs') 
+     end.
+
+
+End Elimination.
+
+Combined Scheme mut_rect from gType_rect, seq_gType_rect.
+Definition mut_ind_indDef := [indDef for mut_rect].
+Canonical gType_indType := IndType gType mut_ind_indDef.
+Definition gType_eqMixin := [derive eqMixin for gType].
+Canonical gType_eqType := EqType gType gType_eqMixin.
+Definition gType_choiceMixin := [derive choiceMixin for gType].
+Canonical gType_choiceType := ChoiceType gType gType_choiceMixin.
+Definition gType_countMixin := [derive countMixin for gType].
+Canonical gType_countType := CountType gType gType_countMixin.
+
+Check mut_rect.
+Definition gType_ind P := @mut_rect P (fun gs => forall g, List.In g gs -> P g).
+(*Lemma gType_ind :
   forall (P : gType -> Prop),
     P GEnd ->
     (forall v, P (var_gType v)) ->
@@ -99,7 +132,10 @@ Proof.
    * simpl. contradiction. 
    * move=> a0 l H. simpl. case. move =><-. apply Ih. done. 
   + move => g g0. by apply : P_par. 
-Qed.
+Qed.*)
+
+(*
+Definition gType_der := [indDef for gType_ind].
 
 Fixpoint gType_eqb g0 g1 := 
 let list_eq := fix list_eq s1 s2 {struct s1} := 
@@ -169,7 +205,7 @@ Qed.
  
 
 Definition gType_eqMixin := EqMixin gType_eqb_axiom. 
-Canonical gType_EqType := EqType gType gType_eqMixin.
+Canonical gType_EqType := EqType gType gType_eqMixin.*)
 
 Fixpoint bound_i (i : nat) (g : gType) := 
 match g with 
@@ -178,7 +214,7 @@ match g with
 | GBranch _ gs => all (bound_i i) gs
 | GPar g0 g1 => (bound_i i g0) && (bound_i i g1)
 | GRec g0 => bound_i (S i) g0
-| var_gType n => n < i
+| GVar n => n < i
 end.
 
 (*Inspired by Francisco*)
@@ -189,7 +225,7 @@ match g with
 | GBranch _ gs => all (contractive_i 0) gs
 | GPar g0 g1 => (contractive_i d g0) && (contractive_i d g1)
 | GRec g0 => contractive_i (S d) g0
-| var_gType n => d <= n
+| GVar n => d <= n
 end. 
 
 (*
@@ -202,7 +238,7 @@ Fixpoint substitution (i : nat) (g0 g1 : gType) :=
 match g0 with
 | GMsg a u g0' => GMsg a u (substitution i g0' g1)
 | GBranch a gs => GBranch a (map (fun g0' => substitution i g0' g1) gs)
-| var_gType n => if n == i then g1 else g0
+| GVar n => if n == i then g1 else g0
 | GRec g0' => GRec (substitution (S i) g0' g1)
 | GPar g0' g1' => GPar (substitution i g0' g1) (substitution i g1' g1)
 | GEnd => GEnd
@@ -225,13 +261,12 @@ Notation gt_pred := (fun n0 n1 g => bound_i n0 g && contractive_i n1 g).
 (*Arguments WFgTy<pe {_} {_} {_} _.*)
 Arguments GMsg {_}.
 Arguments GBranch {_}.
-Arguments var_gType {_}.
+Arguments GVar {_}.
 Arguments GRec {_}.
 Arguments GPar {_}.
 Arguments GEnd {_}.
 
-Arguments LV {_}.
-Arguments LN {_}.
+
 
 
 (*Later when we want to do mutual inductive definition with endpoints*)
