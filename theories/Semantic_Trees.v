@@ -821,23 +821,35 @@ move => a0 a1. rewrite /IO_II. move/orP=>[]. rewrite /IO. move/eqP=>->. apply in
 rewrite /II. move/eqP=>->. apply in_action_to.
 Qed.
 
-Lemma stepG_linear : forall g G l g', stepG g G l g' -> Linear g -> Linear g'.
+Lemma in_split : forall (A : eqType) l (x : A), x \in l -> exists l0 l1, l = l0 ++ x::l1.
 Proof.
-move => g G l g'. elim. intros. 
--eauto using linear_sgmsg.
-- intros. apply/linear_branch; eauto. 
-- intros. rewrite /Linear. case. 
- * move => a0 aa a1. rewrite /=. intros. inversion H3. subst.   have : stepG (SGMsg a u g0) (SGMsg a u G0) l0 (SGMsg a u g'0) by  eauto. move => Hstep. 
-   move : (label_linear Hstep H2) =>HLG0. case : (Tr_or (a:: aa ++ ([:: a1])) (SGMsg a u G0)); first auto using (HLG0 nil).
-   move => Hnot.  
-   move : (deletion Hstep H3 Hnot)=> [] s0 [] s1 [] Heq [] Hg0 HG0.
-   case : (cons23 Heq);
-   first (move => [] Hs0 Hs1;subst; simpl in *; inversion HG0; subst; by rewrite in_action_to in H1). 
-   case; first ( move => [] Hs0 Hs1; subst; apply : (HLG0 nil); simpl; eauto using Tr_app). 
+move => A. elim. done.
+move => a l IH x. rewrite inE. move/orP=>[]. move/eqP=>->. exists nil. exists l. done. move/IH=> [] l0 [] l1 ->. exists (a::l0),l1. done. 
+Qed. 
+
+Definition head_of_g sg : option action := 
+match sg with 
+| SGMsg a _ _ => Some a 
+| SGBranch a _ => Some a 
+| _ => None
+end. 
+Lemma stepG_aux : forall g G l g' a_head, stepG g G l g' -> head_of_g G = Some a_head -> ~~ in_action (ptcp_to a_head) (act_of_label l) ->  Linear g -> forall a0 aa a1, 
+Tr (a0 :: aa ++ [:: a1]) g' -> same_ch a0 a1 -> exists_dep InDep a0 aa a1 /\ exists_dep OutDep a0 aa a1.
+Proof.
+move => g G l g' a_head Hstep Hof Inact Lg a aa a1 HG Hch.
+(* * move => a0 aa a1. rewrite /=. intros. inversion H3. subst.   have : stepG (SGMsg a u g0) (SGMsg a u G0) l0 (SGMsg a u g'0) by  eauto. move => Hstep. *) Check label_linear.
+move : (label_linear Hstep Lg) =>LG. case : (Tr_or (a:: aa ++ ([:: a1])) G); first auto using (LG nil).
+   move => Hnot.  Check deletion.
+   move : (deletion Hstep HG Hnot)=> [] s0 [] s1 [] Heq [] Hg0 HG0.
+   case : (cons23 Heq).
+   move => [] Hs0 Hs1;subst; simpl in *. 
+   have : a_head = act_of_label l. inversion HG0;subst; simpl in Hof;by inversion Hof.
+   move => HH. rewrite HH in Inact. rewrite in_action_to in Inact. done.
+   case; first ( move => [] Hs0 Hs1; subst; apply : (LG nil); simpl; eauto using Tr_app). 
    move => [] s0' [] s1' [] Hs0 [] Hs1 Heqaa. subst. simpl in *. 
-   move : (@apply_linear _ _ nil a (s0' ++ (act_of_label l0)::s1') a1 H2 Hg0).  (*get that original g contains in/out chains*)
-   rewrite /= -!catA cat_cons. move => Hinout. move : (Hinout Logic.eq_refl H4)=> [] Hin Hout. 
-   rewrite  -cat_cons -[_::_]cat0s in HG0. (*make it ready to by used with HLG0*)
+   move : (@apply_linear _ _ nil a (s0' ++ (act_of_label l)::s1') a1 Lg Hg0).  (*get that original g contains in/out chains*)
+   rewrite /= -!catA cat_cons. move => Hinout. move : (Hinout Logic.eq_refl Hch)=> [] Hin Hout. 
+   rewrite  -cat_cons -[_::_]cat0s in HG0. (*make it ready to by used with LG*)
    split.
    ** move : Hin => [] m [] Hsize [] Hin _. (*InDep*)
       case Heqb : (nth false m (size s0')); last (apply : delete_middle; exists m; split;eauto). 
@@ -845,160 +857,62 @@ move => g G l g'. elim. intros.
 
 
       move/InDep_iff.
-      have : (a :: (mask (take (size s0') m) s0' ++ act_of_label l0 :: mask (drop (size s0').+1 m) s1') ++ [:: a1]) =
-             (((a :: (mask (take (size s0') m) s0' ++ [::act_of_label l0])) ++ (mask (drop (size s0').+1 m) s1') ++ [:: a1])).
+      have : (a :: (mask (take (size s0') m) s0' ++ act_of_label l :: mask (drop (size s0').+1 m) s1') ++ [:: a1]) =
+             (((a :: (mask (take (size s0') m) s0' ++ [::act_of_label l])) ++ (mask (drop (size s0').+1 m) s1') ++ [:: a1])).
       by rewrite /= -!catA. move =>->.
 
-      move/indep0. move/get_neigbor=> [] x_in []. intros. (*move : (get_neigbor ((take (size s0') m)) s0') => [] pref [] x_in [] -> Hin. *)
+      move/indep0. move/get_neigbor=> [] x_in []. intros.
+
       exfalso. apply/negP. eapply reduce_condition with (a':=x_in). apply : Hstep.   apply : HG0. 
       by rewrite mem_cat a0 orbC. auto using IO_II_in_action. 
-(*bool_congr. apply/orP. right. apply : Hin. amove/indep0. Hind. 
 
- move : Hind H1.
-      case : (split_list ((mask (take (size s0') m) s0'))). move =>->. rewrite /= andbC /=.
-    *** rewrite /IO_II. move/orP=> []. rewrite /IO. move/eqP=>->. by rewrite in_action_from.
-        rewrite /II. move/eqP=>->. by rewrite in_action_to.
-(*         first (move => ->;  rewrite /=; intros; inversion Hin; first contra_list; last (subst; exfalso; eauto using contra2)). *)
-    *** move => [] l' [] a0 Heqa2.  move : (Heqa2) =>->. rewrite -catA. rewrite cat_path /=.
-        move/andP=> [] _ /andP => [] [] _. rewrite andbC /=. rewrite -cat_cons in HG0. move => HH.
-        have : a0 \in a:: s0'. rewrite inE.  apply/orP. right. apply (@mem_mask _ _  (take (size s0') m)). 
-        rewrite Heqa2. by rewrite mem_cat inE eqxx orbC. 
-        move/(@reduce_condition _ _ _ _ Hstep _ a0 _ HG0). 
-        move : HH.
-        rewrite /IO_II. move/orP=> []. rewrite /IO. move/eqP=>->. by rewrite in_action_from.
-        rewrite /II. move/eqP=>->. by rewrite in_action_to.*)
-(*
-        Check reduce_condition.
-      
- move/(@apply_InDep_app _ (a::l') (a0::(act_of_label l0)::(mask (drop (size s0').+1 m) s1')++[::a1])). rewrite /= -!catA cat_cons /= size_cat /=. 
-      have :  1 < (size (mask (drop (size s0').+1 m) s1') + 1).+2 by lia. move => Hlt Hin.
-      move : (Hin Logic.eq_refl Hlt) => Hin2.
-      inversion Hin2; first by contra_list.
-      subst. exfalso.  rewrite -cat_cons in HG0.  apply : negP. apply : (@reduce_condition _ _ _ _ Hstep _ a0 _ HG0).  
-      rewrite inE.  apply/orP.  right. apply (@mem_mask _ _  (take (size s0') m)). 
-      rewrite Heqa2. by rewrite mem_cat inE eqxx orbC. unfold IO in H8. move : (eqP H8)=>->. 
-      rewrite /= in_action_from //=. *)
   ** move : Hout => [] m [] Hsize [] Hout _. (*OutDep*) 
      case Heqb : (nth false m (size s0')); last (apply : delete_middle; exists m; split;eauto).
      move : Hout. rewrite split_mask //= Heqb /=.
 
      move/OutDep_iff.
-      have : (a :: (mask (take (size s0') m) s0' ++ act_of_label l0 :: mask (drop (size s0').+1 m) s1') ++ [:: a1]) =
-             (((a :: (mask (take (size s0') m) s0' ++ [::act_of_label l0])) ++ (mask (drop (size s0').+1 m) s1') ++ [:: a1])).
+      have : (a :: (mask (take (size s0') m) s0' ++ act_of_label l :: mask (drop (size s0').+1 m) s1') ++ [:: a1]) =
+             (((a :: (mask (take (size s0') m) s0' ++ [::act_of_label l])) ++ (mask (drop (size s0').+1 m) s1') ++ [:: a1])).
       by rewrite /= -!catA. move =>->.
 
-      move/outdep0. move/get_neigbor=> [] x_in []. intros.  exfalso. apply : negP.
-      rewrite /IO_OO in b. case : (orP b). intros; eapply reduce_condition with (a':= x_in). apply : Hstep.
-      apply : HG0. by rewrite mem_cat a0 orbC. rewrite -catA cat_cons in HG0.
+      move/outdep0. move/get_neigbor=> [] x_in []. intros. 
+      rewrite /IO_OO in b. case : (orP b). intros.  exfalso. apply : negP. eapply reduce_condition with (a':= x_in). apply : Hstep.
+      apply : HG0. by rewrite mem_cat a0 orbC. move : a2. rewrite /IO. move/eqP=>->. by  rewrite in_action_from. 
 
       rewrite /OO. move/andP=> [] /eqP _ HH0. 
-        move : (HLG0 _ _ _ _ HG0 HH0) => [] HInm HOutm. move : HInm => [] mm [] Hsizem  [] HInm _.
-        move : HInm.
-     ****  case : (split_list (mask mm s0')). move =>->.  simpl. move/InDep_iff. rewrite /=. 
-           rewrite /II. move/eqP. move => Heq0. move : Hact. by rewrite Heq0 in_action_to. 
-     **** move => [] l' [] a0 Hmask. rewrite Hmask. 
-          have : (a :: (l' ++ [:: a0]) ++ [:: act_of_label l0]) =
-                 (a :: (l' ++ [:: a0;act_of_label l0])) by rewrite -catA /=. move=>->. move /InDep_iff. rewrite -cat_cons. move/indep1.        rewrite /= andbC /= /IO_II=> HIOII. simpl in HG0. rewrite -cat_cons in HG0.
+      move : (in_split a0)=> [] l1 [] l2 Heq0. have : x_in \in [::] ++ a :: s0' by rewrite mem_cat a0 orbC. move => xin. Check reduce_condition. move : (@reduce_condition _ _ _ _ Hstep _ _ _ HG0 xin )=> not_act. 
+  simpl in HG0. rewrite -cat_cons Heq0 -catA in HG0. 
+      
+        move : (LG _ _ _ _ HG0 HH0) => [] HInm HOutm. move : HInm => [] mm [] Hsizem  [] HInm _.
+        move : HInm. move/InDep_iff. 
+     case : (split_list (mask mm l2)). move=>->. rewrite /= /II. move/eqP=> HHeq.  exfalso. apply :negP. apply : not_act. 
+        rewrite HHeq. apply/in_action_to.  
+     move => [] l' [] a2 Heq2. rewrite Heq2 -!catA -cat_cons. move/indep1. rewrite /= andbC /=. move => HIO_II.  exfalso. apply : negP. 
+     eapply reduce_condition with (a':=a2). apply Hstep. rewrite catA in HG0.  apply : HG0.
+     rewrite mem_cat. apply/orP. right. rewrite inE. apply/orP. right. apply (@mem_mask  _ _ mm). rewrite Heq2.
+     by rewrite mem_cat inE  eqxx orbC. auto using IO_II_in_action.  
+Qed.
 
-        have : a0 \in a:: s0'. rewrite inE.  apply/orP. right. apply (@mem_mask _ _  mm). rewrite Hmask.
-        rewrite mem_cat. apply/orP. right. by rewrite inE eqxx.
-        move/(@reduce_condition _ _ _ _ Hstep _ a0 _ HG0). move : HIOII. move/orP. case. rewrite /IO. move/eqP=>->.
-        by rewrite in_action_from.  rewrite /II. move/eqP=>->. by rewrite in_action_to. 
-
-   *** move => [] l' [] a0 Hmask. rewrite Hmask. 
-       have : ((l' ++ [:: a0]) ++ [:: act_of_label l0]) = (l' ++ [:: a0;act_of_label l0]) by rewrite -catA /=.
-       move =>->. rewrite cat_path. move/andP=> [] _. rewrite /=. move/andP=> [] _ [].
-       rewrite andbC /=. rewrite /IO_OO. move/orP. case. rewrite /IO. move/eqP.
- simpl 
-apply/orP. right. apply (@mem_mask _ _  (take (size s0') m)). 
-        rewrite Heqa2. by rewrite mem_cat inE eqxx orbC. 
-         have : (rewrite Heqintros. inversion HInmHInm _ Houtm.  _.
-
-move/eqP=>->. by rewrite in_action_to.
-(*         first (move => ->;  rewrite /=; intros; inversion Hin; first contra_list; last (subst; exfalso; eauto using contra2)). *)
-    *** move => [] l' [] a0 Heqa2.  move : (Heqa2) =>->. rewrite -catA. rewrite cat_path /=.
-        move/andP=> [] _ /andP => [] [] _. rewrite andbC /=. rewrite -cat_cons in HG0. move => HH.
-        have : a0 \in a:: s0'. rewrite inE.  apply/orP. right. apply (@mem_mask _ _  (take (size s0') m)). 
-        rewrite Heqa2. by rewrite mem_cat inE eqxx orbC. 
-        move/(@reduce_condition _ _ _ _ Hstep _ a0 _ HG0). 
-        move : HH.
-        rewrite /IO_II. move/orP=> []. rewrite /IO. move/eqP=>->. by rewrite in_action_from.
-        rewrite /II. move/eqP=>->. by rewrite in_action_to.
-
-
-
-
-
-
-
- move/OutDep_iff. rewrite -cat_cons. 
-     have :  ((a :: mask (take (size s0') m) s0' ++ act_of_label l0 :: mask (drop (size s0').+1 m) s1') ++ [:: a1]) =
-             ((a :: mask (take (size s0') m) s0' ++ [::act_of_label l0]) ++ ((mask (drop (size s0').+1 m) s1') ++ [:: a1])).
-     by rewrite /= -!catA.
-     move => ->. move/outdep_app0=> outapp.
-
-     have :  1 < size (a :: mask (take (size s0') m) s0' ++ [:: act_of_label l0]). rewrite /= size_cat addnC /=. lia.
-     move/outapp=> outapp2.
-  simpl in outapp.
-     rewrite size_cat in outapp.
-Ltac use_lia := match goal with 
-                | H : (?H0 -> _) |- _  => have : ?H0 by lia
-                end.
-     use_lia.
-intros.
-     rewrite /=. 
-     rewrite -catA cat_cons.  move/apply_OutDep_app=> HOut2. rewrite cat_cons. move => Hout.
-     case : (split_list ((mask (take (size s0') m) s0'))) Hout.
-     move => ->;  rewrite /=.  intros. inversion Hout; first contra_list. subst. case : H8. intros. exfalso. eauto using contra2. 
-     move => Hoo. rewrite -cat_cons in HG0. exfalso.  apply : negP. eapply distinct_channel with (a' := a). apply : Hstep. apply :HG0.   by  rewrite inE eqxx. move : Hoo => /andP => [] [] _.  auto. 
-
-     (*contradictory cases*)
-     move => [] l' [] a0 Heq0 => Hout. inversion Hout. subst. case :  ( ((mask (take (size s0') m) s0'))) H8. simpl. case. intros. contra_list H8.  
-     intro. simpl. intros.   case : H8. intros. contra_list H8. 
-
-     subst. rewrite Heq0 in Hout. move : Hout. move/(@apply_OutDep_app _ (a::l') (a0::(act_of_label l0)::(mask (drop (size s0').+1 m) s1')++[::a1])).  
-
-     rewrite /= -!catA cat_cons /= size_cat /=. 
-      have :  1 < (size (mask (drop (size s0').+1 m) s1') + 1).+2 by lia. move => Hlt Hout.
-      move : (Hout Logic.eq_refl Hlt) => Hout2.
-      inversion Hout2. contra_list H12.  
-      subst. case : H11. intros. exfalso.  apply : negP. eapply reduce_condition with (a' := a0). apply : Hstep. rewrite -cat_cons in HG0. apply : HG0. rewrite inE.  apply/orP.  right. apply (@mem_mask _ _  (take (size s0') m)). 
-      rewrite Heq0. by rewrite mem_cat inE eqxx orbC. move : a2 => /eqP => ->. rewrite in_action_from //=. 
-
-      intros. exfalso. apply : negP. eapply distinct_channel with (a' := a0). apply : Hstep. rewrite -cat_cons in HG0. apply : HG0.
-      rewrite inE.  apply/orP.  right. apply (@mem_mask _ _  (take (size s0') m)). 
-      rewrite Heq0. by rewrite mem_cat inE eqxx orbC. move : b => /andP => [] []. rewrite /same_ch. done. 
+Lemma stepG_linear : forall g G l g', stepG g G l g' -> Linear g -> Linear g'.
+Proof.
+move => g G l g'. elim/stepG_ind2. intros. 
+-eauto using linear_sgmsg.
+- intros. apply/linear_branch; eauto. 
+- intros. rewrite /Linear. case. 
+ * move => a0 aa a1. rewrite /=. intros.  have : stepG (SGMsg a u g0) (SGMsg a u G0) l0 (SGMsg a u g'0) by  eauto. 
+   move/stepG_aux=>HH. apply : HH;simpl;auto. 
  * intros. rewrite cat_cons in H3. inversion H3. subst. 
       have : Linear g'0 by eauto using linear_sgmsg. move => H5.  apply : H5. eauto. done. 
-- admit.
-Admitted.
+- intros. rewrite /Linear. case. 
+ * move => a0 aa a1. rewrite /=. intros. have : stepG (SGBranch a gs) (SGBranch a GS) l0 (SGBranch a gs') by  eauto.
+   move/stepG_aux=>HH. apply : HH;simpl;auto. 
+ * intros. rewrite cat_cons in H3. inversion H3. subst. 
+   move : (app_Forall3 H0)=>[] HH HH1.
+   case Heq : (n < size gs). apply HH in Heq. eauto. apply/linear_branch. apply : H2. done.
+   rewrite nth_default in H6.   inversion H6. apply nil_ll in H7.  case : H7. intros. inversion b.  lia. 
+Qed.
 
 
-Lemma step_linear : forall g l g', step g l g' -> Linear g -> Linear g'.
-Proof.
-move => g l g' /step_G. case. intros. eauto using stepG_linear.  
-Qed. 
-
-
-(*Definition Linear_at sg := forall sg' (aa : seq label), After sg aa sg' -> opt_rel_sg same_ch sg sg' ->
- (exists (aa_id : seq label), (subseq aa_id aa) /\ InDep (acts_of_ls aa_id)) /\  
- (exists (aa_od : seq label), (subseq aa_od aa)  /\ OutDep (acts_of_ls aa_od)).
-
-Inductive Linear : sgType -> Prop :=
- | Linear_C  sg : (forall sg' a, DAfter sg a sg' -> Linear sg') ->  Linear_at sg  -> Linear sg.
-
-Definition in_action (p : ptcp) (a : action):=  (p==(ptcp_from a)) || (p==(ptcp_to a)).
-
-
-
-
-
-Definition def_of_label (l : label) :=
-match l with 
-| LU a v => GMsg a v GEnd
-| LN a n => GBranch a (nseq n.+1 GEnd)
-end. *)
-(*branching might be empty list, no constraints about that here, we expect well formed sgTypes and will produces well formed sgTypes, that's it*)
 
 
 Definition project2_forall (A B: Type) (R : A -> B -> Type) (l0 : seq A) (l1 : seq B) (H : Forall2 R l0 l1) :=
