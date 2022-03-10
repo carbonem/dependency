@@ -254,12 +254,7 @@ Inductive step : sgType -> label -> sgType -> Prop :=
  | GR4 a l gs gs' : Forall2 (fun g g' => step g l g') gs gs' ->  ~~in_action (ptcp_to a) (act_of_label l)  ->  step (SGBranch a gs) l (SGBranch a gs').
 Hint Constructors step. 
 
-(*Inductive step : sgType -> label -> sgType -> Prop :=
- | GR1 (a : action) u g : step (SGMsg a u g) (LU a u) g
- | GR2 a n d gs : n < size gs -> step (SGBranch a gs) (LN a n) (nth d gs n)
- | GR3 a u l g1 g2 : step g1 l g2 -> (ptcp_to a) \notin l -> step (SGMsg a u g1) l (SGMsg a u g2)
- | GR4 a d l gs gs' : size gs = size gs' -> (forall n, n < size gs -> step (nth d gs n) l (nth d gs' n)) -> (ptcp_to a) \notin l ->  step (SGBranch a gs) l (SGBranch a gs').
-Hint Constructors step. *)
+
 
 Inductive stepG : sgType -> sgType -> label  -> sgType -> Prop :=
 | GGR1 a u g0 : stepG (SGMsg a u g0) (SGMsg a u SGEnd) (LU a u) g0
@@ -269,17 +264,7 @@ Inductive stepG : sgType -> sgType -> label  -> sgType -> Prop :=
 | GGR4 a gs GS gs' l : Forall3 (fun g G g' => stepG g G l g') gs  GS gs' -> ~~in_action (ptcp_to a) (act_of_label l) -> stepG (SGBranch a gs) (SGBranch a GS) l (SGBranch a gs').
 Hint Constructors stepG.
 
-(*Inductive stepG : sgType -> sgType -> label  -> sgType -> Prop :=
-| GGR1 a u g0 : stepG (SGMsg a u g0) (SGMsg a u SGEnd) (LU a u) g0
-| GGR2 a n d gs : n < size gs -> stepG (SGBranch a gs) (SGBranch a nil) (LN a n) (nth d gs n)
-| GGR3 a u  g G l g' : stepG g G l g'  -> 
-                      (ptcp_to a) \notin l -> 
-                     stepG (SGMsg a u g) (SGMsg a u G) l (SGMsg a u g')
-| GGR4 a d gs GS gs' l : size gs = size GS -> size GS = size gs' -> (forall n, n < size gs -> stepG (nth d gs n) (nth d GS n) l (nth d gs' n)) -> (ptcp_to a) \notin l -> stepG (SGBranch a gs) (SGBranch a GS) l (SGBranch a gs').
-Hint Constructors stepG.*)
 
-(*Lemma forall_n_Forall : forall A B (P : A -> B -> Prop) (l0 : seq A) (l1 : seq B) da db, size l0 = size l1 ->  (forall n : nat, n < size l0 -> P (nth da l0 n) (nth db l1 n)) -> Forall2 P l0 l1.
-Proof. Admitted.*)
 
 Lemma Forall3_forall_n : forall A B C (P : A -> B -> C -> Prop) (l0 : seq A) (l1 : seq B) (l2 : seq C) da db dc, Forall3 P l0 l1 l2 -> (forall n, n < size l0 -> P (nth da l0 n) (nth db l1 n) (nth dc l2 n)) /\ size l0 = size l1 /\ size l1 = size l2.  
 Proof.
@@ -420,28 +405,11 @@ Qed.
 
 
 
-
-
 Definition app_Forall3 {P : sgType -> sgType -> sgType -> Prop}{gs GS gs' : seq sgType} (H : Forall3 P gs GS gs') := @Forall3_forall_n _ _ _ _ gs GS gs' SGEnd SGEnd SGEnd H.
 
-Check Forall3_forall_n_def.
 
 Definition app_Forall3_def {P : sgType -> sgType -> sgType -> Prop}{gs GS gs' : seq sgType}  (H : Forall3 P gs GS gs') (H0 : P SGEnd SGEnd SGEnd) := @Forall3_forall_n_def _ _ _ _ gs GS gs' SGEnd SGEnd SGEnd H0 H.
 
-
-(*Lemma reduce_condition : forall g G l g' aa a, stepG g G l g' -> Tr aa G ->  
-a \in aa -> a = (act_of_label l) \/ ~~in_action (ptcp_to a) (act_of_label l).  
-Proof.
-move => g G l g' aa a H. move : H aa a. elim/stepG_ind2.
-- intros. inversion H.  subst. done. subst. inversion H3. subst. move : H0. rewrite inE. move/eqP=>->. auto.  
-- intros. inversion H0.  subst. done. subst. rewrite nth_nil in H4. inversion H4. subst. move : H1. rewrite inE. move/eqP=>->. auto.  
-- intros. inversion H2.  subst. done. subst.
-  move : H3.  rewrite inE. move/orP=> [ /eqP -> | H7 ]; auto. case : (H0 aa0 a0 H6);auto. 
-- intros. inversion H2.  subst. done. subst.
-  move : H3.  rewrite inE. move/orP=> [ /eqP -> | H7 ]; auto. move : (app_Forall3 H0)=> [] Hf [] Heq0 Heq1. auto.
-  case Heq : (n < size gs). eauto. (*applies Hf*)
-  move : H6. rewrite nth_default //=. intros. inversion H6. subst. done. lia.
-Qed.*)
 
 
 Lemma reduce_condition : forall g G l g', stepG g G l g' -> forall aa a' a, Tr (aa++([::a])) G ->  
@@ -466,57 +434,6 @@ Check TRBranchn.
 Arguments TRBranchn {_} {_} n.
 Check TRBranchn.
 
-(*Lemma exists_full_path : forall g G l g', stepG g G l g' -> exists aa, Tr (aa++[::(act_of_label l)]) G.
-Proof.
-move => g G l g'. elim/stepG_ind2.
-- intros. exists nil. simpl. auto.
-- intros. exists nil. simpl. auto using (TRBranchn 0).
-- intros. case : H0=> x HH. exists (a::x). simpl. auto.
-- intros.*)
-(*Lemma stepG_label_last : forall g G l g' aa, stepG g G l g' -> Tr aa G -> 0 < size aa -> exists aa', Tr (aa++aa'++[::act_of_label l]) G \/ aa = aa'++[::act_of_label l].
-Proof.
-move => g G l g' aa H. move : H aa. elim/stepG_ind2.
-- intros. inversion H. subst. done. 
-  subst. inversion H3. subst. exists nil. auto.
-- intros. inversion H0. subst. done. 
-  subst. rewrite nth_nil in H4. inversion H4. subst. exists nil. auto.
-- intros. inversion H2. subst. done.
- subst. simpl in H3. case : (H0 _ H6 H3) => x [].
- * intros. simpl. eauto. 
- *  intros. subst. exists (a::x). auto. 
-- intros. inversion H2.
- * subst. simpl.  move : (app_Forall3 H0) => [] H3 [] Heq0 Heq1. 
-   case Heq : (0 < size gs).
-   move : (H3 0 Heq nil (TR_nil _))=>[] x [].
-  ** simpl. intros. exists (a::x). simpl.  eauto.
-  ** intros. contra_list.
- 
-  case : GS H H0 H2 H3 Heq0 Heq1. simpl. intros.
-  
-apply  H0. . cCheck nth_nil. Check (nth_nil SGEnd 0).  in H0.  Check (TRBranchn a H0). left. Check TRBranch.  apply : TRBranchconstructor. econstructor. auto.
-  subst. inversion H2. subst. exists nil. auto.
-- intros. inversion H. subst. done. subst. inversion H2. subst. exists nil. auto. 
-- intros.
-exists aa0. right. rewrite /=. exists nil. rewrite /=. auto.
-
--*)
-(*Lemma distinct_channel : forall g G l g' aa a, stepG g G l g' -> Linear G -> Tr aa G -> a \in aa -> a = act_of_label l \/ ~~same_ch a (act_of_label l).  
-Proof.
-intros. move : (reduce_condition H H1 H2)=>[];auto.
-intros. right. 
-apply/negP=>H3.  move => g G l g'.
-elim.
-- intros. inversion H0.  contra_list. case : aa H0 H2 H1. done.  rewrite /=. intros. inversion H0.
-  subst. inversion H8. contra_list.
-- intros. inversion H1. subst. contra_list. subst. case : aa H1 H2 H3. done.
-  rewrite /=. intros. rewrite nth_nil in H5. inversion H5. subst. case : H3. intros. contra_list.
-- intros. case : aa H3 H4;first done.
-  rewrite /=. intros. inversion H3. subst. move : H4. rewrite inE. move/orP=>[ /eqP -> | _].
- * done.
-simp-
-  rewrite /=. move => a1 l0 Ht.  rewrite inE. move/orP. case. 
- * move/eqP=>->. intros.
-Admitted. *)
 
 Lemma deletion : forall g G l g', stepG g G l g' -> forall s, Tr s g' -> ~ Tr s G -> exists s0 s1, s = s0++s1 /\ Tr (s0++(act_of_label l)::s1) g /\ Tr (s0++([::act_of_label l])) G.
 Proof. 
@@ -669,52 +586,11 @@ intros. move : (ind_aux a2 b). move/andP=> []. rewrite cat_path. move => _ /andP
   rewrite /=. move => _ /andP => [] []. done. 
 Qed.
 
-(*Lemma indep0_aux : forall l0 l1, indep (l0 ++ l1) ->  0 < size l1 -> if l0 is x::l0' then path IO x l0' else true.
-Proof.
-move => l0 l1. rewrite /indep.
-case :l0 ;first done.
-move => a l. rewrite /=. case : l;first done.
-move => a0 l. rewrite /=. move/andP=> [] H _. elim : l a a0 H.
-- move => a a0. rewrite /=. case : l1. done. 
-move => a1 l. simpl. intros. move : H. by move/andP=> [] ->.
-move => a l IH a0 a1. intros. rewrite /=. simpl in H. move : H=> /andP => [] [] -> /=.  
-intros. auto. 
-Qed.*)
-
-
-(*Lemma indep0 : forall l0 l1, indep (l0 ++ l1)  -> if l0 is x::l0' then path IO_II x l0' else true.
-Proof.
-move => l0 []. rewrite cats0. case : l0. done. move => a l. simpl. case : l. done. move => a0 l. 
-intros. rewrite /=.*)
-
-(*Notation io_chain := (dep IO).*)
-(*Lemma InDep_app0 : forall l1 l0, indep (l0 ++ l1) -> 1 < size l1 -> dep IO l0.
-Proof.
-elim. move => l0.  rewrite cats0. case :l0. done. move => a l. rewrite /=. case : l. done. 
-move => a0 l. case : l. done. done.  
-move => a l IH l0. intros. apply IH.
-move => a1 l /andP =>[] []. rewrite /=. done.
-move => a l IH l1. rewrite cat_cons. move => H. inversion H. subst.
-case : l H2 H IH.  rewrite /=. move => <-. done. 
-move => a0 l. rewrite cat_cons. case. move => <-. case : l.  case : l1. done. done. done. 
-intros. subst. rewrite H1 in H3. auto. 
-Qed.*)
 
 Inductive IO_seq : seq action -> Prop :=
  | IO_seq0 a b : IO a b ->  IO_seq ([::a; b])
  | IO_seq1 a b l : IO a b -> IO_seq (b::l) -> IO_seq (a::b::l).
 
-
-(*Lemma InDep2 : forall l0 a, InDep (l0++([::a])) -> 1 < size l0  -> InDep l0.
-Proof. 
-elim. rewrite /=. done.
-move => a l IH a0. rewrite cat_cons. move => H. inversion H. subst.
-- have : l = nil. case : l IH H H2. simpl. done. simpl. intros. case : H2. intros. contra_list. 
-  move =>->.  done. 
-- subst. intros. case : l H2 H IH.  rewrite /=. move => <-. done. 
-move => a0 l. rewrite cat_cons. case. move => <-. case : l.  case : l1. done. done. done. 
-intros. subst. rewrite H1 in H3. auto. 
-Qed.*)
 
 Lemma apply_InDep_app : forall l l0 l1 , InDep l -> l = l0++l1 -> 1 < size l1 -> InDep l1.
 Proof.
@@ -833,18 +709,15 @@ match sg with
 | SGBranch a _ => Some a 
 | _ => None
 end. 
-Lemma stepG_aux : forall g G l g' a_head, stepG g G l g' -> head_of_g G = Some a_head -> ~~ in_action (ptcp_to a_head) (act_of_label l) ->  Linear g -> forall a0 aa a1, 
+Lemma stepG_aux : forall g G l g', stepG g G l g' -> Linear g -> forall a0 aa a1, 
 Tr (a0 :: aa ++ [:: a1]) g' -> same_ch a0 a1 -> exists_dep InDep a0 aa a1 /\ exists_dep OutDep a0 aa a1.
 Proof.
-move => g G l g' a_head Hstep Hof Inact Lg a aa a1 HG Hch.
-(* * move => a0 aa a1. rewrite /=. intros. inversion H3. subst.   have : stepG (SGMsg a u g0) (SGMsg a u G0) l0 (SGMsg a u g'0) by  eauto. move => Hstep. *) Check label_linear.
+move => g G l g'  Hstep  Lg a aa a1 HG Hch.
 move : (label_linear Hstep Lg) =>LG. case : (Tr_or (a:: aa ++ ([:: a1])) G); first auto using (LG nil).
-   move => Hnot.  Check deletion.
+   move => Hnot.  
    move : (deletion Hstep HG Hnot)=> [] s0 [] s1 [] Heq [] Hg0 HG0.
-   case : (cons23 Heq).
-   move => [] Hs0 Hs1;subst; simpl in *. 
-   have : a_head = act_of_label l. inversion HG0;subst; simpl in Hof;by inversion Hof.
-   move => HH. rewrite HH in Inact. rewrite in_action_to in Inact. done.
+   case : (cons23 Heq). 
+   move => [] Hs0 Hs1;subst; simpl in *. have : Tr (([::act_of_label l]) ++ (a::aa) ++  ([::a1])) g. by  simpl. move => Hg0'.  apply : Lg. apply : Hg0'. done. 
    case; first ( move => [] Hs0 Hs1; subst; apply : (LG nil); simpl; eauto using Tr_app). 
    move => [] s0' [] s1' [] Hs0 [] Hs1 Heqaa. subst. simpl in *. 
    move : (@apply_linear _ _ nil a (s0' ++ (act_of_label l)::s1') a1 Lg Hg0).  (*get that original g contains in/out chains*)
@@ -895,26 +768,24 @@ Qed.
 
 Lemma stepG_linear : forall g G l g', stepG g G l g' -> Linear g -> Linear g'.
 Proof.
-move => g G l g'. elim/stepG_ind2. intros. 
--eauto using linear_sgmsg.
-- intros. apply/linear_branch; eauto. 
-- intros. rewrite /Linear. case. 
- * move => a0 aa a1. rewrite /=. intros.  have : stepG (SGMsg a u g0) (SGMsg a u G0) l0 (SGMsg a u g'0) by  eauto. 
-   move/stepG_aux=>HH. apply : HH;simpl;auto. 
- * intros. rewrite cat_cons in H3. inversion H3. subst. 
-      have : Linear g'0 by eauto using linear_sgmsg. move => H5.  apply : H5. eauto. done. 
-- intros. rewrite /Linear. case. 
- * move => a0 aa a1. rewrite /=. intros. have : stepG (SGBranch a gs) (SGBranch a GS) l0 (SGBranch a gs') by  eauto.
-   move/stepG_aux=>HH. apply : HH;simpl;auto. 
- * intros. rewrite cat_cons in H3. inversion H3. subst. 
+move => g G l g'. elim/stepG_ind2.  
+- eauto using linear_sgmsg.
+- eauto using linear_branch.  
+- intros. rewrite /Linear. case.
+ * eauto using stepG_aux. 
+ * intros. simpl in H3. inversion H3;subst. apply : H0;eauto using linear_sgmsg. 
+- intros. rewrite /Linear. case.
+ * eauto using stepG_aux.
+ * intros. simpl in H3. inversion H3;subst.
    move : (app_Forall3 H0)=>[] HH HH1.
-   case Heq : (n < size gs). apply HH in Heq. eauto. apply/linear_branch. apply : H2. done.
-   rewrite nth_default in H6.   inversion H6. apply nil_ll in H7.  case : H7. intros. inversion b.  lia. 
+   case Heq : (n < size gs).
+  **  apply : HH;eauto using linear_branch.  
+  ** rewrite nth_default in H6; last lia.  inversion H6. by move : H7=> /nil_ll  => [] []. 
 Qed.
 
 
 
-
+(*
 Definition project2_forall (A B: Type) (R : A -> B -> Type) (l0 : seq A) (l1 : seq B) (H : Forall2 R l0 l1) :=
 match H with
 | Forall2_nil=> nil
@@ -1123,7 +994,6 @@ Qed.
 
 
 
-
 Fixpoint end_list sgs :=
 match sgs with 
 | nil => true 
@@ -1192,3 +1062,4 @@ match g,r with
 | SGBranch a gs, Rose (LN a' n) nil => if a == a' then List.nth_error gs n
 | SGBranch a gs, Rose (LN a' n) rs => if a == a' && leq (size gs) (size rs) then 
 
+*)
