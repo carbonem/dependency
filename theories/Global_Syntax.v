@@ -47,29 +47,47 @@ Canonical action_choiceType := ChoiceType action action_choiceMixin.
 Definition action_countMixin := [derive countMixin for action].
 Canonical action_countType := CountType action action_countMixin.
 
+Definition ptcp_from (a : action) := let : Action p0 _ _ := a in p0.
+Definition ptcp_to (a : action) := let : Action _ p1 _ := a in p1.
+Definition action_ch (a : action) := let : Action _ _ c := a in c.
+
 Unset Elimination Schemes. Check seq.
-Inductive gType  : Type :=
+Inductive gType  : Set :=
   | GVar : nat -> gType  
   | GEnd : gType  
   | GRec : gType -> gType  
   | GMsg : action -> value -> gType -> gType  
   | GBranch : action -> seq gType -> gType  
- with value  : Type :=
+ with value  : Set  :=
   | VSeqSort : seq mysort -> value  
   | VLT : endpoint -> ptcp  -> value  
- with mysort  : Type :=
+ with mysort  : Set :=
   | SBool : mysort
   | SNat : mysort  
   | SGType : gType -> mysort (*maybe more sorts?*)
- with endpoint  : Type :=
+ with endpoint  : Set :=
   | EVar : nat -> endpoint  
   | EEnd : endpoint  
-  | ESend : ch -> mysort -> endpoint -> endpoint  
-  | EReceive : ch -> mysort  ->  endpoint-> endpoint  
+  | ESend : ch -> value -> endpoint -> endpoint  
+  | EReceive : ch -> value  ->  endpoint-> endpoint  
   | ESelect : ch  -> seq endpoint -> endpoint  
   | EBranch : ch -> seq endpoint -> endpoint  
   | ERec : endpoint -> endpoint .
 Set Elimination Schemes.
+
+
+(*It is hard to give a mutually inductive nested induction principle*)
+(*
+Scheme gType_ind := Induction for gType Sort Prop 
+with value_ind := Induction for value Sort Prop 
+with mysort_ind := Induction for mysort Sort Prop 
+with endpoint_ind := Induction for endpoint Sort Prop.
+
+Check gType_ind.
+Combined Scheme gvme_ind from gType_ind,value_ind,mysort_ind,endpoint_ind.
+*)
+
+
 
 Section Elimination.
 
@@ -96,8 +114,8 @@ Hypothesis Pm_sgtype : forall g : gType, Pg g -> Pm (SGType g).
 
 Hypothesis Pe_var : forall n : nat, Pe (EVar n). 
 Hypothesis Pe_end : Pe EEnd.
-Hypothesis Pe_send : forall (c : ch) (s : mysort), Pm s -> forall e : endpoint, Pe e -> Pe (ESend c s e).
-Hypothesis Pe_receive :  forall (c : ch) (s : mysort), Pm s -> forall e : endpoint, Pe e -> Pe (EReceive c s e).
+Hypothesis Pe_send : forall (c : ch) (s : value), Pv s -> forall e : endpoint, Pe e -> Pe (ESend c s e).
+Hypothesis Pe_receive :  forall (c : ch) (s : value), Pv s -> forall e : endpoint, Pe e -> Pe (EReceive c s e).
 Hypothesis Pe_sel : forall (c : ch) (l : seq endpoint), P_elist l  -> Pe (ESelect c l).
 Hypothesis Pe_branch : forall (c : ch) (l : seq endpoint), P_elist l -> Pe (EBranch c l).
 Hypothesis Pe_rec : forall e : endpoint, Pe e -> Pe (ERec e).
@@ -111,7 +129,7 @@ Hypothesis P_elist_cons : forall e, Pe e -> forall l, P_elist l -> P_elist (e::l
 Hypothesis P_mlist_0 : P_mlist nil.
 Hypothesis P_mlist_cons : forall s, Pm s -> forall l, P_mlist l -> P_mlist (s::l).
 
-
+(*Maybe used derive mutual induct instead*)
 Fixpoint gType_rect g : Pg g :=
   let fix seq_gType_rect gs : P_glist gs := 
     match gs with 
@@ -152,8 +170,8 @@ let fix seq_endpoint_rect ss : P_elist ss :=
 match e with
 | EVar n => Pe_var n
 | EEnd => Pe_end
-| ESend c m e => Pe_send c (mysort_rect m) (endpoint_rect e)
-| EReceive c m e => Pe_receive c (mysort_rect m) (endpoint_rect e)
+| ESend c m e => Pe_send c (value_rect m) (endpoint_rect e)
+| EReceive c m e => Pe_receive c (value_rect m) (endpoint_rect e)
 | ESelect c es => Pe_sel c (seq_endpoint_rect es)
 | EBranch c es => Pe_branch c (seq_endpoint_rect es)
 | ERec e => Pe_rec (endpoint_rect e)
@@ -161,7 +179,7 @@ end.
 
 
 
-(*Definition seq_gType_rect : forall gs, P_glist gs :=
+Definition seq_gType_rect : forall gs, P_glist gs :=
  fix seq_gType_rect gs : P_glist gs := 
     match gs with 
      | [::] => P_glist_0
@@ -180,7 +198,7 @@ fix seq_endpoint_rect ss : P_elist ss :=
  match ss with
   | [::] => P_elist_0
   | m::ms => P_elist_cons (endpoint_rect m) (seq_endpoint_rect ms)
- end.*)
+ end.
 
 End Elimination.
 
@@ -188,15 +206,17 @@ End Elimination.
 Combined Scheme mut_ind_aux from gType_rect, mysort_rect, value_rect, endpoint_rect.
 
 Notation In := List.In.
+Notation Forall := List.Forall.
 Section SpecializeElimination. 
-Variables (Pg : gType -> Type) 
-          (Pv : value -> Type) 
-          (Pe : endpoint -> Type) 
-          (Ps : mysort -> Type).
+Variables (Pg : gType -> Prop) 
+          (Pv : value -> Prop) 
+          (Pe : endpoint -> Prop) 
+          (Ps : mysort -> Prop).
 
-Definition mut_ind := (@mut_ind_aux Pg Pv Pe Ps (fun gl => forall g, In g gl ->Pg g)
+Definition mut_ind := (@mut_ind_aux Pg Pv Pe Ps (Forall Pg) (Forall Pe) (Forall Ps)).  
+(*(fun gl => forall g, In g gl ->Pg g)
                                                 (fun el => forall e, In e el ->Pe e)
-                                                (fun sl  => forall s, In s sl ->Ps s)). 
+                                                (fun sl  => forall s, In s sl ->Ps s)). *)
 
 Definition true_pred A := fun (_ : A) => nat.
 Definition gType_rect_true := (@gType_rect Pg  (@true_pred value) (@true_pred endpoint) (@true_pred mysort) (fun gl => forall g, In g gl ->Pg g)
@@ -247,8 +267,8 @@ in
 match e0, e1 with
 | EVar n0, EVar n1 => n0 == n1
 | EEnd , EEnd => true
-| ESend ch0 s0 e0, ESend ch1 s1 e1 => (ch0 == ch1) && (mysort_eqb s0 s1) && (endpoint_eqb e0 e1)
-| EReceive ch0 s0 e0, EReceive ch1 s1 e1 => (ch0 == ch1) && (mysort_eqb s0 s1) && (endpoint_eqb e0 e1)
+| ESend ch0 s0 e0, ESend ch1 s1 e1 => (ch0 == ch1) && (value_eqb s0 s1) && (endpoint_eqb e0 e1)
+| EReceive ch0 s0 e0, EReceive ch1 s1 e1 => (ch0 == ch1) && (value_eqb s0 s1) && (endpoint_eqb e0 e1)
 | ESelect ch0 s0, ESelect ch1 s1 => (ch0 == ch1) && (list_eq s0 s1)
 | EBranch ch0 s0, EBranch ch1 s1 =>  (ch0 == ch1) && (list_eq s0 s1)
 | ERec e0, ERec e1 => endpoint_eqb e0 e1
@@ -270,14 +290,11 @@ Ltac inject :=  split; [ by move=>-> | by case ].
 Ltac inject2 :=  split;[ case; by move =>->-> | case;by move =>->-> ]. 
 Ltac inject3 := split; [ case;  move=>->; case; move=>->->; done |  case; move =>->->->; done]. 
 
-Locate in_eq.
-Lemma refl_eqbs :  reflexive gType_eqb * (reflexive mysort_eqb * (reflexive value_eqb * reflexive endpoint_eqb)). 
-Proof. unfold reflexive.
+Locate in_eq. 
+Lemma refl_eqbs :  reflexive gType_eqb * (reflexive mysort_eqb * (reflexive value_eqb * (reflexive endpoint_eqb))). 
+Proof. unfold reflexive. 
 apply : mut_ind; intros;rewrite /= ?eqxx /=; 
-       try solve [by rewrite /= | by rewrite H H0 | by rewrite H 
-                  | induction l; first done; last intros;rewrite /=;apply/andP;split;simpl in*;auto
-                  | simpl in *; case : H1=>[<-|];auto 
-                  | elim : l H;auto; intros; rewrite refl_eqbs //=; apply H; intros; apply H0; simpl;auto]. 
+       try solve [by rewrite /= | by rewrite H H0 | by rewrite H | induction l; first done; last (inversion H; rewrite H2 /=; auto)| constructor; auto].  
 Defined.
 
 
@@ -344,19 +361,17 @@ Proof. unfold leib_eq.  apply : mut_ind.
  * move/andP=> [] /eqP=>->. intros. f_equal. generalize dependent l0.
    move : H. induction l. move => H. case_filter. done. 
    move => H. case_filter. done. 
-   move : b. move/andP. case. intros. f_equal.  rewrite -H.  done. simpl;auto. apply IHl. 
-   intros. apply H. simpl. by right. apply b. 
+   move : b. move/andP. case. intros. inversion H. subst. f_equal. by  rewrite -H2.   apply IHl. 
+   done.  apply b. 
  * case. move=>->->. rewrite eqxx /=.  generalize dependent l0.
    case_filter. rewrite refl_eqbs /=.  induction l0. done. 
    rewrite refl_eqbs /=. done. 
-
 - intros. case_filter_on b. rewrite /=. split. 
  * intros. f_equal. generalize dependent l0. induction l.
   ** case_filter. done.
   ** case_filter. done. 
-     move : H0. move/andP. case. intros. f_equal. f_equal.
-     rewrite -H. done. simpl;auto. apply IHl. intros. 
-     apply H.  simpl. by right.  apply b. 
+     move : H0. move/andP. case. intros. inversion H. subst. f_equal. 
+     apply/H2. done. auto.
  * case. move =>->. induction l0. done. rewrite refl_eqbs /=. apply IHl0. 
 - intros. case_filter_on b. destruct p0. rewrite /=. split. 
  * move/andP. case. rewrite H. move =>-> /eqP =>->. done. 
@@ -380,8 +395,9 @@ Proof. unfold leib_eq.  apply : mut_ind.
 - intros. case_filter_on b.  rewrite /=. split. 
   * move/andP=>[] /eqP ->. intros. f_equal.
    elim : l l0 H b. case;done. 
-   intros. elim : l0 b; first done. intros. move : (andP b) =>[].  intros. simpl in*. f_equal;auto.
-   apply H0. auto. auto. 
+   intros. elim : l0 b; first done. intros. move : (andP b) =>[].  intros.
+   inversion H0.  subst. f_equal;auto.
+   apply/H4. done. auto. 
   * case. move =>->->. rewrite eqxx //=.
     elim : l0 H. auto.  rewrite /=. intros. rewrite refl_eqbs //=.
      apply/H. auto. 
@@ -389,8 +405,8 @@ Proof. unfold leib_eq.  apply : mut_ind.
 - intros. case_filter_on b.  rewrite /=. split. 
   * move/andP=>[] /eqP ->. intros. f_equal.
    elim : l l0 H b. case;done. 
-   intros. elim : l0 b; first done. intros. move : (andP b) =>[].  intros. simpl in*. f_equal;auto.
-   apply H0. auto. auto. 
+   intros. elim : l0 b; first done. intros. move : (andP b) =>[].  intros. inversion H0. f_equal;auto.
+   apply/H4. done. auto. 
   * case. move =>->->. rewrite eqxx //=.
     elim : l0 H. auto.  rewrite /=. intros. rewrite refl_eqbs //=.
      apply/H. auto. 
@@ -399,9 +415,7 @@ Proof. unfold leib_eq.  apply : mut_ind.
   move=>->. done.
   case. done.
 all : try (rewrite /=; done).
-simpl in *. intros. case : H1. move=><-.  apply/H. move/H0. auto. 
-simpl in *. intros. case : H1. move=><-.  apply/H. move/H0. auto. 
-simpl in *. intros. case : H1. move=><-.  apply/H. move/H0. auto. 
+all : intros;constructor;auto.  
 Defined.
 
 
@@ -522,7 +536,19 @@ elim; try solve [by rewrite /=].
 - intros. rewrite /=. f_equal. apply H. done. 
 Qed.
 
-Notation dec x := (Sumbool.sumbool_of_bool x).
+Fixpoint unf g i := if g is GRec g' then if i is i'.+1 then unf (substitution 0 g' g) i' else g else g.
+
+
+
+Definition g_next_aux g := 
+match g with 
+| GMsg a u g0 => Some (a,[::g0])
+| GBranch a gs => Some (a,gs)
+| _ => None
+end.
+
+
+(*Notation dec x := (Sumbool.sumbool_of_bool x).
 
 Equations unf_recs (i : nat) g : gType by wf (mu_height g)  :=
 unf_recs i (GRec g) := if (dec (contractive_i i (GRec g))) is left _  then (unf_recs i (substitution i g (GRec g))) else g;
@@ -543,9 +569,12 @@ match unf_recs 0 g with
 | GMsg a _ _ => Some a
 | GBranch a _ => Some a
 | _ => None
-end.
+end.*)
 
 End Operations.
+
+Notation g_next g := (g_next_aux (unf g (mu_height g))).
+
 
 Notation bound := (bound_i 0).
 Notation contractive := (contractive_i 0).
@@ -553,7 +582,6 @@ Notation contractive := (contractive_i 0).
 Notation "G [ G0 ]" := (substitution 0 G G0)(at level 0, format "G [ G0 ]").
 
 Notation gt_pred := (fun n0 n1 g => bound_i n0 g && contractive_i n1 g).
-
 
 
 
@@ -692,3 +720,4 @@ Canonical value_EqType := EqType value value_EqMixin.
 
 
 *)
+
