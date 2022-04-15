@@ -1,16 +1,16 @@
 (*Require Export Dep.fintype. *)
 
 From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import zify.
+
 From Equations Require Import Equations.
 From mathcomp Require Import fintype.
-From deriving Require Import deriving. Locate In.
+From deriving Require Import deriving. 
+Require Import Dep.Syntax.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-Inductive ptcp  : Set :=
-  | Ptcp : nat   -> ptcp .
 
 Definition nat_of_ptcp (p : ptcp) := let: Ptcp n := p in n.
 Canonical ptctp_newType := Eval hnf in [newType for nat_of_ptcp]. 
@@ -22,9 +22,6 @@ Definition ptcp_countMixin := [countMixin of ptcp by <:].
 Canonical ptcp_countType := CountType ptcp ptcp_countMixin.
 
 
-Inductive ch  : Set :=
-  | Ch : nat   -> ch .
-
 Definition nat_of_ch (c : ch) := let: Ch n := c in n.
 Canonical ch_newType := Eval hnf in [newType for nat_of_ch].
 Definition ch_eqMixin := [eqMixin of ch by <:]. 
@@ -33,9 +30,6 @@ Definition ch_choiceMixin := [choiceMixin of ch by <:].
 Canonical ch_ChoiceType := Eval hnf in ChoiceType ch ch_choiceMixin.
 Definition ch_countMixin := [countMixin of ch by <:].
 Canonical ch_countType := CountType ch ch_countMixin.
-
-
-Inductive action  : Set := Action of ptcp & ptcp & ch.
 
 Definition prod_of_action (a : action) := let '(Action p0 p1 c) := a in (p0,p1,c). 
 Definition action_indDef := [indDef for action_rect].
@@ -50,30 +44,6 @@ Canonical action_countType := CountType action action_countMixin.
 Definition ptcp_from (a : action) := let : Action p0 _ _ := a in p0.
 Definition ptcp_to (a : action) := let : Action _ p1 _ := a in p1.
 Definition action_ch (a : action) := let : Action _ _ c := a in c.
-
-Unset Elimination Schemes. Check seq.
-Inductive gType  : Set :=
-  | GVar : nat -> gType  
-  | GEnd : gType  
-  | GRec : gType -> gType  
-  | GMsg : action -> value -> gType -> gType  
-  | GBranch : action -> seq gType -> gType  
- with value  : Set  :=
-  | VSeqSort : seq mysort -> value  
-  | VLT : endpoint -> ptcp  -> value  
- with mysort  : Set :=
-  | SBool : mysort
-  | SNat : mysort  
-  | SGType : gType -> mysort (*maybe more sorts?*)
- with endpoint  : Set :=
-  | EVar : nat -> endpoint  
-  | EEnd : endpoint  
-  | ESend : ch -> value -> endpoint -> endpoint  
-  | EReceive : ch -> value  ->  endpoint-> endpoint  
-  | ESelect : ch  -> seq endpoint -> endpoint  
-  | EBranch : ch -> seq endpoint -> endpoint  
-  | ERec : endpoint -> endpoint .
-Set Elimination Schemes.
 
 
 (*It is hard to give a mutually inductive nested induction principle*)
@@ -332,18 +302,6 @@ Definition list_eq {A} (r : A -> A -> bool) l0 l1 :=  (fix list_eq
      end) l0 l1.
 
 
-(*Lemma list_eqb_i_eq A (r : A -> A -> bool) l :  (forall g : A,
-        In g l ->
-        forall g1 : A,
-        r g g1 <-> g = g1) -> forall l1, list_eq r l l1 <-> l = l1. 
-Proof.
-rewrite /list_eq . elim : l. move => H.
-case. done. done. 
-
-move => a2 l IH H2 []. done. split. move/andP=>[]. intros. simpl in *. f_equal; auto. apply/H2. auto. auto. 
-apply/IH. auto. auto. case. 
-move=>->->. apply/andP. split. simpl in H2. move : (H2move => a l0 /andP []. intros. simpl in H2. f_equal;auto. 
-Qed.*)
 
 Ltac eqbr := rewrite /= refl_eqbs ; try done.
 
@@ -488,15 +446,28 @@ all: try (rewrite /true_pred; constructor).
 rewrite /=. done. rewrite /=. 
 intros. case : H6. move=><-. auto. auto. 
 Qed.
+Locate scons.
+Fixpoint build_sigma_aux sigma g : (nat -> gType) := 
+match g with 
+| GRec g' => build_sigma_aux (unscoped.scons g sigma) g'
+| _ => GVar
+end.
 
-Section Operations.
-Implicit Type g : gType.
+Definition build_sigma g := build_sigma_aux GVar g.
+
+Fixpoint unf_aux sigma g := 
+match g with 
+| GRec g' => unf_aux (unscoped.scons g sigma) g'
+| _ => subst_gType sigma g
+end.
+
+Notation unf := (unf_aux GVar).
+
 Fixpoint bound_i (i : nat) g  := 
 match g with 
 | GEnd => true
 | GMsg _ _ g0 => bound_i i g0
 | GBranch _ gs => all (bound_i i) gs
-(*| GPar g0 g1 => (bound_i i g0) && (bound_i i g1)*)
 | GRec g0 => bound_i (S i) g0
 | GVar n => n < i
 end.
@@ -507,21 +478,9 @@ match g with
 | GEnd => true
 | GMsg _ _ g0 => contractive_i 0 g0
 | GBranch _ gs => all (contractive_i 0) gs
-(*| GPar g0 g1 => (contractive_i d g0) && (contractive_i d g1)*)
 | GRec g0 => contractive_i (S d) g0
 | GVar n => d <= n
 end. 
-
-
-Fixpoint substitution (i : nat) g0 g1  :=
-match g0 with
-| GMsg a u g0' => GMsg a u (substitution i g0' g1)
-| GBranch a gs => GBranch a (map (fun g0' => substitution i g0' g1) gs)
-| GVar n => if n == i then g1 else g0
-| GRec g0' => GRec (substitution (S i) g0' g1)
-(*| GPar g0' g1' => GPar (substitution i g0' g1) (substitution i g1' g1) *)
-| GEnd => GEnd
-end.
 
 Fixpoint mu_height g :=
 match g with
@@ -529,26 +488,161 @@ match g with
 | _ => 0
 end.
 
-Lemma mu_height_subst : forall g0 g1  i, contractive_i (S i) g0 -> mu_height (substitution i g0 g1) = mu_height g0.
-Proof. 
-elim; try solve [by rewrite /=].
-- rewrite /=. intros. case : (eqVneq n i) H. move=>->. by rewrite ltnn. by rewrite /=. 
-- intros. rewrite /=. f_equal. apply H. done. 
-Qed.
-
-Fixpoint unf g i := if g is GRec g' then if i is i'.+1 then unf (substitution 0 g' g) i' else g else g.
-
-
-
-Definition g_next_aux g := 
-match g with 
+Definition g_next g := 
+match unf g with 
 | GMsg a u g0 => Some (a,[::g0])
 | GBranch a gs => Some (a,gs)
 | _ => None
 end.
 
+Fixpoint unf2 (sigma : nat -> gType) g i :=  if i is i'.+1  then 
+                                            if g is GRec g' then unf2 sigma (subst_gType (unscoped.scons g GVar) g') i' 
+                                                            else subst_gType sigma g 
+                                                         else g.
 
-(*Notation dec x := (Sumbool.sumbool_of_bool x).
+Require Import Dep.unscoped.
+
+
+Fixpoint up_iter (sigma : nat -> gType) i := if i is i'.+1 then (up_iter (up_gType_gType sigma) i') else sigma.
+
+Lemma  up_iter_test : forall k n sigma, (GVar n)[up_iter sigma k] = if n < k then (GVar n) else sigma n.
+Proof.
+elim.
+elim.  intros. rewrite /=. done.
+       intros. rewrite /=. done. 
+intros. simpl. rewrite H. destruct (n0 < n) eqn :Heqn. have : n0 < n.+1 by lia. move=>->. done. case : n0 Heqn. rewrite /=.
+ done. simpl. intros. rewrite /=. destruct ( n0.+1 < n.+1) eqn:Heqn2. asimpl. 
+Admitted.
+
+
+Lemma move_sigma : forall g' sigma, bound_i 0 g' ->unf_aux sigma g' = unf_aux GVar (g'[sigma]). 
+Proof. 
+intros g'. remember (mu_height g'). elim : n g' Heqn.
+2 : { move => n H. case; try done. intros. simpl.  asimpl. inversion Heqn. rewrite H //=. symmetry. rewrite H. f_equal. asimpl. f_equal. f_equal. f_equal.
+Admitted.
+
+
+Lemma cont_lt : forall (g : gType) i j, j < i -> contractive_i i g -> contractive_i j g.
+Proof.
+elim;auto.
+- rewrite /=. move => n i j. move/ltP=> + /leP;intros.  apply/leP. lia. 
+- move => g H.  rewrite /=. intros. have : j.+1 < i.+1. apply/ltP. move : H0. move/ltP. lia. eauto. 
+Qed.
+
+
+Lemma unf_spec : forall g, bound_i 0 g -> contractive_i 0 g -> unf_aux GVar g = unf2 GVar g (mu_height g).
+Proof.
+intros g. remember (mu_height g). elim : n g Heqn.
+- case; try done. 
+ * intros. rewrite /=. f_equal. rewrite idSubst_gType //=.
+ * intros. rewrite /=. f_equal. clear Heqn. elim : l H H0.  done. intros. simpl. f_equal.
+   rewrite idSubst_gType //=. apply H. apply (andP H0). apply (andP H1). 
+- move => n H [];try done.  intros. rewrite /=. rewrite -H //=. rewrite move_sigma //=.
+  Admitted.
+
+Lemma bound_subst : forall g sigma , bound_i 0 g -> g[sigma]=g.
+Proof. Admitted.
+
+
+
+(*Lemma mu_height_subst : forall g0 g1  i, contractive_i (S i) g0 -> mu_height (subst_gType i g0 g1) = mu_height g0.
+Proof. 
+elim; try solve [by rewrite /=].
+- rewrite /=. intros. case : (eqVneq n i) H. move=>->. by rewrite ltnn. by rewrite /=. 
+- intros. rewrite /=. f_equal. apply H. done. 
+Qed.
+*)
+
+
+
+(*
+Lemma unf_spec : forall g sigma, unf_aux sigma g = unf2 g (mu_height g).
+Proof. 
+move => g. remember (mu_height g). elim  : n g Heqn.
+- intros. rewrite /=.  case : g  H Heqn H0. all : try  solve [rewrite //=]. 
+  * intros. rewrite /=.  rewrite idSubst_gType //=. 
+  * intros. rewrite /=. f_equal. clear Heqn. elim : l H H0. done. intros. simpl. 
+    f_equal. rewrite idSubst_gType //=. simpl in *.  apply H. apply (andP H0). apply (andP H2).
+- intros. rewrite /=. case : g Heqn H0 H1; try done.
+  intros. simpl. rewrite test.  rewrite H. done. rewrite mu_height_subst //=. inversion Heqn. auto. 
+   rewrite bound_cont_subst //=. apply : (@cont_lt _ 1). lia. done. intros. apply : bound_cont_eq. 
+   simpl in H1. eauto. done. intros. apply bound_subst'. done. done. done.  done.
+Qed.*)
+
+
+
+
+
+
+(*
+Lemma test : forall g' g sigma, (forall x, sigma x = GVar x) -> unf_aux (unscoped.scons g sigma) g' = unf_aux sigma (substitution 0 g' g).
+Proof.
+intros g'. remember (mu_height g'). elim : n g' Heqn.
+- case. intros.  rewrite /=. case : (eqVneq n 0). intros. subst. asimpl.
+ 
+
+Lemma bound_cont_subst : forall (g g': gType) i j, bound_i (S i) g -> contractive_i j g -> bound_i 0 g' -> (forall j, contractive_i j g') -> 
+contractive_i j (substitution i g g').
+Proof.
+elim; (try solve [rewrite /= ;auto]).
+- rewrite/=. move => v g' i j. case : (eqVneq v i).  done. simpl. done.
+- rewrite /=. intros. apply/allP. move=> gsub /mapP. case. intros. subst. 
+  apply H;auto. auto using (allP H0), (allP H1). auto using (allP H1). 
+Qed.
+
+
+Lemma bound_cont_eq : forall (g : gType) i, bound_i i g -> contractive_i i g -> (forall j, contractive_i j g).
+Proof.
+elim; rewrite/=;auto.
+- rewrite /=. move => v i /ltP + /leP. lia. 
+- rewrite /=. intros. eauto. 
+Qed.
+
+
+Lemma bound_lt : forall (g : gType) i j, i < j -> bound_i i g -> bound_i j g.
+Proof. 
+elim.
+- rewrite /=;auto. move=>n i j.  move=> /leP H /ltP H1. apply/ltP.  lia. 
+- rewrite /=;auto. intros. apply : (@H i.+1 j.+1); done. 
+- rewrite /=;auto. 
+- intros. move : H1. rewrite /=.  move/allP=>H2. apply/allP. move=> l' Hin. move : (H2 l' Hin). 
+  apply H;auto. 
+Qed.
+
+
+Lemma bound_0 : forall (g : gType) j, bound_i 0 g -> bound_i j g.
+Proof.
+intros. case : j. done. intros. apply  : (@bound_lt _ 0). done. done.
+Qed.
+
+Lemma bound_subst' : forall (g g': gType) i, bound_i (S i) g -> bound_i 0 g' -> bound_i i (substitution i g g').
+Proof.
+elim.
+-  rewrite /=;intros;case : (eqVneq n i).
+   move=><-. apply bound_0. done. rewrite /bound_i. move : H. move=> /ltP H1 /eqP H2. 
+   apply/ltP. lia. 
+- rewrite /=. done. 
+- rewrite /=. intros. apply H. done. done.
+- rewrite /=. intros. auto. 
+- rewrite /=. intros. move : (allP H0)=> H2. apply/allP. move => l' /mapP. case. intros. 
+  subst. apply H;auto.
+Qed.
+
+Lemma unf_spec : forall g sigma, contractive_i 0 g -> bound_i 0 g -> (forall x, sigma x = GVar x) -> unf_aux sigma g = unf2 g (mu_height g).
+Proof. 
+move => g. remember (mu_height g). elim  : n g Heqn.
+- intros. rewrite /=.  case : g  H Heqn H0. all : try  solve [rewrite //=]. 
+  * intros. rewrite /=.  rewrite idSubst_gType //=. 
+  * intros. rewrite /=. f_equal. clear Heqn. elim : l H H0. done. intros. simpl. 
+    f_equal. rewrite idSubst_gType //=. simpl in *.  apply H. apply (andP H0). apply (andP H2).
+- intros. rewrite /=. case : g Heqn H0 H1; try done.
+  intros. simpl. rewrite test.  rewrite H. done. rewrite mu_height_subst //=. inversion Heqn. auto. 
+   rewrite bound_cont_subst //=. apply : (@cont_lt _ 1). lia. done. intros. apply : bound_cont_eq. 
+   simpl in H1. eauto. done. intros. apply bound_subst'. done. done. done.  done.
+Qed.
+
+
+Notation dec x := (Sumbool.sumbool_of_bool x).
 
 Equations unf_recs (i : nat) g : gType by wf (mu_height g)  :=
 unf_recs i (GRec g) := if (dec (contractive_i i (GRec g))) is left _  then (unf_recs i (substitution i g (GRec g))) else g;
@@ -557,29 +651,22 @@ Next Obligation.
 rewrite mu_height_subst. done. done.
 Qed.
 
-Definition g_next g :=
-match unf_recs 0 g with 
-| GMsg _ _ g0 => [::g0]
-| GBranch _ gs => gs
-| _ => [::]
-end.
+
 
 Definition act_of_g g :=
 match unf_recs 0 g with 
 | GMsg a _ _ => Some a
 | GBranch a _ => Some a
 | _ => None
-end.*)
+end.
 
-End Operations.
-
-Notation g_next g := (g_next_aux (unf g (mu_height g))).
-
+End Operations.*)
+Check unf_aux.
 
 Notation bound := (bound_i 0).
 Notation contractive := (contractive_i 0).
 
-Notation "G [ G0 ]" := (substitution 0 G G0)(at level 0, format "G [ G0 ]").
+(*Notation "G [ G0 ]" := (substitution 0 G G0)(at level 0, format "G [ G0 ]").*)
 
 Notation gt_pred := (fun n0 n1 g => bound_i n0 g && contractive_i n1 g).
 
@@ -720,4 +807,3 @@ Canonical value_EqType := EqType value value_EqMixin.
 
 
 *)
-

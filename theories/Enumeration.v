@@ -1,5 +1,5 @@
-Require Import Dep.Syntax.
-
+Require Import Dep.Global_Syntax.
+Require Import Dep.Linearity.
 Require Import Lists.List.
 From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import zify.
@@ -13,8 +13,7 @@ Require Import Program.
 Ltac uf name := rewrite /name -/name.
 
 Section Enumeration.
-Variable U : countType.
-Implicit Type g : gType U.
+Implicit Type g : gType.
 Fixpoint gType_size g :=
 match g with
  | GMsg a u g0 => (gType_size  g0).+1
@@ -25,11 +24,17 @@ match g with
 end.
 
 Definition g_next g :=
-match unf_recs g with 
+match unf_recs 0 g with 
 | GMsg _ _ g0 => [::g0]
 | GBranch _ gs => gs
 | _ => [::]
 end.
+
+Fixpoint linear g :=
+match g with
+ | GMsg a u g0 => 
+
+Lemma 
 
 Fixpoint gEnum n g : seq (gType U) :=
 if n is n'.+1 then g::(map (gEnum n') (g_next g)) else g.

@@ -2,8 +2,7 @@
 -arg -w
 -arg none
 theories/axioms.v
-theories/fintype.v
 theories/global_types.v
-theories/global_types_small.v
+theories/syntax.v
 theories/test.v
 theories/unscoped.v

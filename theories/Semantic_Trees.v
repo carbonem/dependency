@@ -32,13 +32,33 @@ Inductive Unravel (r : gType -> sgType -> Prop) : gType -> sgType -> Prop :=
  | URec g sg : r g[GRec g] sg  -> Unravel r (GRec g) sg.
 Hint Constructors Unravel.
 
+
 Require Import Paco.paco.
 Check paco2.
 
 Definition GUnroll g sg : Prop := paco2 Unravel bot2 g sg.
 
-Print value.
-CoFixpoint sgt := SGMsg (Action (Ptcp 0) (Ptcp 0) (Ch 0)) (VSeqSort nil) sgt.
+Example test : GUnroll (GRec (GVar 0)) SGEnd.
+unfold GUnroll. pcofix CIH. pfold. constructor. right. simpl. done.
+Qed.
+Check Unravel_ind.
+Lemma Unravel_ind2
+     : forall r P : gType -> sgType -> Prop,
+       P GEnd SGEnd ->
+       (forall (a : action) (u : value) (g0 : gType) (sg0 : sgType),
+        Unravel r g0 sg0 -> P g0 sg0 -> P (GMsg a u g0) (SGMsg a u sg0)) ->
+       (forall (gs : seq gType) (sgs : seq sgType) (a : action),
+        Forall2 (Unravel r) gs sgs -> Forall2 P gs sgs -> P (GBranch a gs) (SGBranch a sgs)) ->
+       (forall (g : gType) (sg : sgType), r (g)[GRec g] sg -> P (GRec g) sg) ->
+       forall (g : gType) (s : sgType), Unravel r g s -> P g s.
+Proof.
+intros. move : g s H3. fix IH 3. move => g s [].
+- apply H.
+- intros. apply H0. apply u0.  apply IH. apply u0. 
+- intros. apply H1. apply f.
+- induction f.  done. constructor. apply IH. apply H3. apply IHf. 
+- intros. apply H2. apply r0.
+Qed.
 
 Lemma GUnroll_mono : monotone2 Unravel.
 Proof.
@@ -243,8 +263,10 @@ Definition exists_depP  (Pm : seq bool -> Prop) (P : seq action -> Prop) a0 aa a
 Notation exists_dep := (exists_depP (fun _ => True)).
 
 
-Definition Linear (sg : sgType) := forall aa_p a0 aa a1, Tr (aa_p ++ (a0::aa++[::a1])) sg -> same_ch a0 a1 -> 
-exists_dep InDep a0 aa a1 /\ exists_dep OutDep a0 aa a1 .
+Definition Linear (sg : sgType) := forall aa_p a0 aa a1, 
+Tr (aa_p ++ (a0::aa++[::a1])) sg -> 
+same_ch a0 a1 -> 
+exists_dep InDep a0 aa a1 /\ exists_dep OutDep a0 aa a1.
 
 
 Inductive step : sgType -> label -> sgType -> Prop :=
@@ -253,6 +275,26 @@ Inductive step : sgType -> label -> sgType -> Prop :=
  | GR3 a u l g1 g2 : step g1 l g2 -> ~~in_action (ptcp_to a) (act_of_label l) -> step (SGMsg a u g1) l (SGMsg a u g2)
  | GR4 a l gs gs' : Forall2 (fun g g' => step g l g') gs gs' ->  ~~in_action (ptcp_to a) (act_of_label l)  ->  step (SGBranch a gs) l (SGBranch a gs').
 Hint Constructors step. 
+
+Lemma step_ind2
+     : forall P : sgType -> label -> sgType -> Prop,
+       (forall (a : action) (u : value) (g0 : sgType), P (SGMsg a u g0) (LU a u) g0) ->
+       (forall (a : action) (d : sgType) (gs : seq sgType) (n : nat),
+        n < size gs -> P (SGBranch a gs) (LN a n) (nth d gs n)) ->
+       (forall (a : action) (u : value) (g G : sgType) (l : label) (g' : sgType),
+        step g l g' -> P g l g' ->  ~~in_action (ptcp_to a) (act_of_label l) -> P (SGMsg a u g) l (SGMsg a u g')) ->
+       (forall (a : action) (gs gs' : seq sgType) (l : label),
+        Forall2 (fun g g' : sgType => step g l g') gs gs' -> Forall2 (fun g0  g2 => P g0 l g2) gs gs' ->
+         ~~in_action (ptcp_to a) (act_of_label l) -> P (SGBranch a gs) l (SGBranch a gs')) ->
+       forall (s : sgType) (l : label) (s1 : sgType), step s l s1 -> P s l s1.
+Proof.
+move => P H0 H1 H2 H3. fix IH 4.
+move => ss l s1 [].
+intros. apply H0;auto. 
+intros. apply H1;auto.
+intros. apply H2;auto.
+intros. apply H3;auto. elim : f;auto.  
+Qed.
 
 
 
@@ -622,35 +664,6 @@ Qed.
 
 Check list_ind.
 
-(*Lemma list_ind2 
-     : forall (A : Type) (P : seq A -> Prop), P nil -> (forall (a : A) (l : seq A), P l -> P (l++([::a]))) -> forall l : seq A, P l.
-Proof.
-intros. move : l. fix IH 1. case. done. intros.
-move => l. case : (split_list l).
-- move => ->. done.
-- move => [] l' [] a ->. apply H0. apply IH. Qed. intros. apply : H0. apply : IH. done. intros.*)
-
-(*Lemma OutDep_aux : forall l0 s x, OutDep (rcons s x).
-Proof.
-intros. remember (l0 ++ rcons s x).
-elim : l Heql H. 
-- intros. inversion H.
-- intros. subst.
-Lemma OutDep2 : forall l0 l1, OutDep (l0 ++ l1) -> 1 < size l0 -> OutDep l0.
-Proof.
-move => l0 l1. move : l1 l0. elim/last_ind.
-- move => l0. rewrite cats0. done.
-- intros. apply H. move => a l IH l1. rewrite cat_cons. move => H. inversion H. 
- * subst. case : H1. 
-  ** case : l H2 H IH.  simpl. done. 
-  **  move => a0 l. rewrite cat_cons. case. intros.  move : (nil_ll H0) H1 => []  -> ->. rewrite /=.  subst. done. 
- * intros. case : l H2 H IH H0. 
-  ** done.  
-  ** move => a0 l. rewrite cat_cons. case. intros. move : (nil_ll H0) H1 => [] -> ->. simpl. done. 
-subst. case : l IH H H1. done. 
-simpl. intros. case : H1. intros. subst. constructor. auto. case : apply : IH.  eauto. intros. subst. auto. apply : IH. eauto.  rewrite /=. move => <-. intros. constructor. auin H0. apply List.app_cons_not_nil in H0. move => <- <-. intros. inversion H. constructor. auto. apply : IH. contra_list. case : l.  case : l1. done. done. done. 
-intros. subst. rewrite H1 in H3. auto. 
-Qed.*)
 
 Lemma apply_OutDep_app : forall l l0 l1 , OutDep l -> l = l0++l1 -> 1 < size l1-> OutDep l1.
 Proof.
@@ -666,14 +679,6 @@ move => H3. rewrite H3. split. lia. split;auto. move : H1. rewrite !split_mask /
 by rewrite size_take H0 size_cat /= H3. 
 Qed.
 
-(*Lemma include_middle : forall a0 l0 a l1 a1 P, exists_depP (fun m => nth false m (size l0) = true) P a0 (l0 ++ a::l1) a1 ->
-                      exists_dep P a0 (l0++l1) a1.
-Proof.
-intros. move : H => [] m [] H0 [] H1 H2. exists ((take (size l0) m)++(drop (size l0).+1 m)).
-rewrite size_cat size_take size_drop H0 !size_cat /=. have : size l0 < size l0 + (size l1).+1 by lia.
-move => H3. rewrite H3. split. lia. split;auto. move : H1. rewrite !split_mask //=. rewrite H2 /= mask_cat //=. 
-by rewrite size_take H0 size_cat /= H3. 
-Qed.*)
 
 Lemma apply_linear : forall g s_tr a_p a0 s a1, Linear g -> Tr s_tr g -> s_tr = a_p++(a0::s++[::a1]) -> same_ch a0 a1 -> exists_dep InDep a0 s a1 /\ exists_dep OutDep a0 s a1.
 Proof.
@@ -703,14 +708,9 @@ move => A. elim. done.
 move => a l IH x. rewrite inE. move/orP=>[]. move/eqP=>->. exists nil. exists l. done. move/IH=> [] l0 [] l1 ->. exists (a::l0),l1. done. 
 Qed. 
 
-Definition head_of_g sg : option action := 
-match sg with 
-| SGMsg a _ _ => Some a 
-| SGBranch a _ => Some a 
-| _ => None
-end. 
-Lemma stepG_aux : forall g G l g', stepG g G l g' -> Linear g -> forall a0 aa a1, 
-Tr (a0 :: aa ++ [:: a1]) g' -> same_ch a0 a1 -> exists_dep InDep a0 aa a1 /\ exists_dep OutDep a0 aa a1.
+
+Lemma stepG_aux : forall g G l g', stepG g G l g' -> Linear g -> 
+forall a0 aa a1, Tr (a0 :: aa ++ [:: a1]) g' -> same_ch a0 a1 -> exists_dep InDep a0 aa a1 /\ exists_dep OutDep a0 aa a1.
 Proof.
 move => g G l g'  Hstep  Lg a aa a1 HG Hch.
 move : (label_linear Hstep Lg) =>LG. case : (Tr_or (a:: aa ++ ([:: a1])) G); first auto using (LG nil).
@@ -766,6 +766,7 @@ move : (label_linear Hstep Lg) =>LG. case : (Tr_or (a:: aa ++ ([:: a1])) G); fir
      by rewrite mem_cat inE  eqxx orbC. auto using IO_II_in_action.  
 Qed.
 
+
 Lemma stepG_linear : forall g G l g', stepG g G l g' -> Linear g -> Linear g'.
 Proof.
 move => g G l g'. elim/stepG_ind2.  
@@ -783,6 +784,400 @@ move => g G l g'. elim/stepG_ind2.
   ** rewrite nth_default in H6; last lia.  inversion H6. by move : H7=> /nil_ll  => [] []. 
 Qed.
 
+Print value.
+(*Consider inductive global types and local types*)
+Unset Elimination Schemes. Check seq.
+CoInductive seType  : Type :=
+  | SEEnd : seType  
+  | SESend : ch -> value -> seType -> seType
+  | SEReceive : ch -> value  ->  seType -> seType
+  | SESelect : ch  -> seq seType  -> seType
+  | SEBranch : ch -> seq seType -> seType.
+Set Elimination Schemes.
+ 
+(*Inductive se_eqF (R : seType -> seType -> Prop) : seType -> seType -> Prop :=
+| seq_end : se_eqF R SEEnd SEEnd
+| seq_send e0 e1 c v :  R e0 e1 -> se_eqF R (SESend c v e0) (SESend c v e1)
+| seq_receive e0 e1 c v : R e0 e1 -> se_eqF R (SEReceive c v e0) (SEReceive c v e1)
+| seq_select es0 es1 c : Forall2 R es0 es1 -> se_eqF R (SESelect c es0) (SESelect c es1)
+| seq_branch es0 es1 c : Forall2 R es0 es1 -> se_eqF R (SEBranch c es0) (SEBranch c es1).
+
+Notation se_eq := (paco2 se_eqF bot2).*)
+
+
+Inductive part_of : sgType -> ptcp -> Prop :=
+| po_msg p a u g0 : in_action p a -> part_of (SGMsg a u g0) p
+| po_msg2 p g0 a u : part_of g0 p -> part_of (SGMsg a u g0) p
+| po_branch p a gs : in_action p a -> part_of (SGBranch a gs) p
+| po_branch2 gs p a g : In g gs -> part_of g p -> part_of (SGBranch a gs) p.
+Hint Constructors part_of.
+(*
+Inductive exists_g (P0 : action -> Prop) : sgType -> Prop :=
+| exists_msg0 a u g0 : P0 a -> exists_g P0 (SGMsg a u g0)
+| exists_msg1 a u g0 : exists_g P0 g0 -> exists_g P0 (SGMsg a u g0)
+| exists_branch0 a gs : P0 a -> exists_g P0 (SGBranch a gs)
+| exists_branch1 a g gs : In g gs -> exists_g P0 g -> exists_g P0 (SGBranch a gs).
+
+
+
+Lemma either : forall g P, exists_g P g \/ paco2 all_g bot2 (fun a => ~ P a) g.
+
+
+*)
+
+(*Maybe cp_notin is not necessary*)
+Inductive co_projF (R : sgType -> ptcp -> seType -> Prop) : sgType -> ptcp -> seType -> Prop :=
+| cp_msg_from g p0 e p1 c u : R g p0 e -> co_projF R (SGMsg (Action p0 p1 c) u g) p0 (SESend c u e)
+| cp_msg_to g p0 e p1 c u : R g p1 e -> co_projF R (SGMsg (Action p0 p1 c) u g) p1 (SEReceive c u e)
+| cp_msg_other g a e  u p : ~in_action p a -> R g p e -> co_projF R (SGMsg a u g) p e
+| cp_branch_from gs es p0 p1 c : Forall2 (fun g e => R g p0 e) gs es -> 
+                                 co_projF R (SGBranch (Action p0 p1 c) gs) p0 (SESelect c es)
+| cp_branch_to gs es p0 p1 c : Forall2 (fun g e => R g p1 e) gs es -> 
+                               co_projF R (SGBranch (Action p0 p1 c) gs) p1 (SEBranch c es)
+| cp_branch_other gs p e a :  ~~ in_action p a -> Forall (fun g => R g p e) gs -> 
+                               co_projF R (SGBranch a gs) p e
+| cp_notin p g  : ~ part_of g p -> co_projF R g p SEEnd.
+Hint Constructors co_projF.
+
+
+Lemma co_proj_mono : monotone3 co_projF.
+Proof.
+move => x y. intros. inversion IN;subst;eauto.
+apply/cp_branch_from. induction H;auto.  
+apply/cp_branch_to. induction H;auto. 
+apply/cp_branch_other. done. induction H0;auto. 
+Qed.
+
+Hint Resolve co_proj_mono : paco.
+Notation  co_proj := (paco3 co_projF bot3).
+
+(*Definition p0 := Ptcp 0.
+Definition p1 := Ptcp 1.
+Definition c := Ch 0.
+Definition act := Action p0 p1 c.
+Definition v := VSeqSort nil.
+
+CoFixpoint sg_rec := SGMsg act v sg_rec.
+CoFixpoint es_rec := SESend (Ch 0) v es_rec.
+
+Definition frob g := 
+match g with 
+| SGEnd => SGEnd 
+| SGMsg a u g => SGMsg a u g
+| SGBranch a gs => SGBranch a gs
+end.
+
+Definition frob2 g := 
+match g with 
+| SEEnd => SEEnd
+| SESend a u g => SESend a u g
+| SEReceive a u g => SEReceive a u g
+| SESelect c es => SESelect c es
+| SEBranch c es => SEBranch c es
+end.
+
+Lemma unfold_sg : sg_rec  = frob sg_rec.
+destruct sg_rec. done. done. done.
+Qed.
+
+Lemma unfold_es : es_rec = frob2 es_rec.
+destruct es_rec; done. 
+Qed.
+Example test2 : co_proj sg_rec p0  es_rec.
+pcofix CIH.
+rewrite unfold_sg unfold_es.  simpl. pfold. constructor. right.  done. 
+Qed.*)
+
+From mathcomp Require Import finmap.
+
+Open Scope fmap_scope.
+Definition is_full_proj (d : {fmap ptcp -> seType}) g (P : ptcp -> Prop) := 
+(forall p e, P p -> co_proj g p e -> d.[? p] = Some e) /\ (forall p, ~ P p -> d.[? p] = None).
+
+Inductive rec_red : seType -> (ch * (value + nat)) -> seType -> Prop :=
+| rr_msg c v e0  : rec_red (SEReceive c v e0) (c, inl v) e0
+| rr_eb n es c : n < size es -> rec_red (SEBranch c es) (c, inr n) (nth SEEnd es n).
+Hint Constructors rec_red.
+
+Inductive send_red : seType ->  (ch * (value + nat))  -> seType -> Prop :=
+| sr_msg c v e0  : send_red (SESend c v e0) (c, inl v) e0
+| sr_msg0 c c' v e0 e0' l ann : send_red e0 l e0' ->  c <> c' -> send_red (SESend c v e0) (c', ann) (SESend c v e0')
+| sr_eb n es c  : n < size es -> send_red (SESelect c es) (c, inr n) (nth SEEnd es n)
+| sr_eb0 es0 es1 c c' ann : Forall2 (fun e0 e1 => send_red e0 (c',ann) e1) es0 es1 -> c <> c' ->  send_red (SESelect c es0) (c',ann) (SESelect c es1).
+Hint Constructors send_red.
+
+(*Remove d'*)
+Inductive ctx_red : {fmap ptcp -> seType} -> (action * (value + nat)) -> {fmap ptcp -> seType} -> Prop :=
+| ctx_red_comm (d d' : {fmap ptcp -> seType})  p0 p1 c e0 e0' e1 e1' ann : 
+                 d.[? p0] = Some e0 -> d'.[? p0] = Some e0' ->  
+                 d.[? p1] = Some e1 -> d'.[? p1] = Some e1'  -> 
+                 send_red e0 (c, ann) e0' -> rec_red e1 (c,ann) e1' -> 
+                 (forall p, p \notin [:: p0;p1] ->  d.[? p] = d'.[? p]) ->
+                 ctx_red d (Action p0 p1 c, ann) d'.
+
+Definition label_change l :=
+match l with 
+| LU a u => (a,inl u)
+| LN a n => (a,inr n)
+end.
+
+Lemma end_no_ptcp : forall p,  ~ part_of SGEnd p.
+Proof.
+intros. move => H. inversion H.
+Qed.
+
+
+Inductive non_refl (P : sgType -> Prop) : sgType -> Prop :=
+| nr_end : non_refl P SGEnd
+| nr_msg a u g0 : ptcp_from a <> ptcp_to a -> P g0 -> non_refl P (SGMsg a u g0)
+| nr_branch a gs : ptcp_from a <> ptcp_to a -> Forall P gs -> non_refl P (SGBranch a gs).
+Hint Constructors non_refl.
+
+Lemma non_refl_mono : monotone1 non_refl.
+Proof.
+move => x y. intros. inversion IN;auto. constructor. done. subst. induction H0;auto. 
+Qed.
+
+Hint Resolve non_refl_mono : paco.
+
+Definition Coherent g := Linear g /\ (forall p, exists e, co_proj g p e) /\ paco1 non_refl bot1 g.
+
+Definition ptcp_of_act a := let : Action p0 p1 _ := a in p0::p1::nil.
+
+(*Fixpoint ptcps_of_g (g : gType) := 
+match g with 
+| GMsg a _ g0 => (ptcp_of_act a)++(ptcps_of_g g0)
+| GBranch a gs => (ptcp_of_act a)++flatten (map ptcps_of_g gs)
+| GRec g0 => ptcps_of_g g0
+| _ => nil
+end.
+
+Lemma ptcp_in_action : forall p a,  p \in ptcp_of_act a = in_action p a.
+Proof.
+intros. case : a. intros. by  rewrite /= !inE.
+Qed.*)
+
+
+Lemma msg_cont_proj : forall a p u g e, (ptcp_from a) <> (ptcp_to a) -> co_proj (SGMsg a u g) p e -> exists e', (if p == (ptcp_from a) then e = SESend (action_ch a) u e' else if p == (ptcp_to a) then e = SEReceive (action_ch a) u e' else e = e')  /\ co_proj g p e'.
+Proof.
+intros.  punfold H0. inversion H0;subst.    
+- rewrite /= eqxx. inversion H6. exists e0. split. done. auto. done.
+- rewrite eqxx.  case : (eqVneq p p2) H6 H. move => ->. done. intros. inversion H6. eauto. done. 
+- exists e. destruct a. simpl in H6. move : H6. move/negP.  rewrite negb_or. move/andP=>[]. rewrite -!eqbF_neg. move/eqP=>-> /eqP=> ->. 
+  inversion H7. eauto. done.
+- exists SEEnd. have : ~ in_action p a. move => H2. apply H1. auto. 
+  destruct a. simpl. move/negP. rewrite negb_or. move /andP=>[].  rewrite -!eqbF_neg. move /eqP=>-> /eqP ->. 
+  split;auto. pfold. apply cp_notin. move => H2. apply H1.  apply po_msg2. auto.  
+Qed.
+
+Lemma msg_cont_other : forall p p1 p2 c0 u g0 e_big, p1 <> p2 -> p \notin [:: p1; p2] -> co_proj (SGMsg (Action p1 p2 c0) u g0) p e_big ->  co_proj g0 p e_big.
+Proof.
+intros. have : ptcp_from (Action p2 p3 c0) <> ptcp_to (Action p2 p3 c0). done. intros.
+move : (msg_cont_proj x H1)=> [] e'. move : H0. rewrite /= !inE negb_or. move/andP=>[]. rewrite -!eqbF_neg. repeat move/eqP=>->.
+by move=> [] ->.
+Qed.
+
+Lemma part_of_from : forall p p2 c0 u g0 , part_of (SGMsg (Action p p2 c0) u g0) p.
+Proof.
+intros. constructor. by rewrite /= eqxx. 
+Qed.
+
+
+Lemma part_of_to : forall p p2 c0 u g0 , part_of (SGMsg (Action p p2 c0) u g0) p2.
+Proof.
+intros. constructor. by rewrite /= eqxx orbC. 
+Qed.
+
+Hint Resolve part_of_from part_of_to.
+
+
+(*Fixpoint all_ind_g (P : action -> bool) g := 
+match g with 
+| GEnd => true 
+| GMsg a u g0 => P a && all_ind_g P g0
+| GBranch a gs => P a && all (all_ind_g P) gs 
+| GRec g => all_ind_g P g
+| GVar _ => true 
+end.
+
+Inductive all_g (R : (action -> Prop) -> sgType -> Prop) (P0 : action -> Prop) : sgType -> Prop :=
+| all_end : all_g R P0 SGEnd
+| all_msg a u g0 : R P0 g0 -> P0 a -> all_g R P0 (SGMsg a u g0)
+| all_branch a gs : Forall (R P0) gs -> all_g R P0 (SGBranch a gs).*)
+
+
+
+
+
+Lemma part_of_or : forall g p, (part_of g p) \/ (~ part_of g p).
+Proof. 
+Admitted.
+
+
+Lemma non_refl_msg : forall p p2 c0 u g0, paco1 non_refl bot1 (SGMsg (Action p p2 c0) u g0) -> p <> p2.
+Proof.
+intros. punfold H. inversion H. subst. simpl in H2. done.
+Qed.
+
+
+Lemma sg_to_se : forall g l g' d d',  step g l g'  -> 
+Coherent g -> is_full_proj d g (fun p => part_of g p) -> 
+ is_full_proj d' g' (fun p => part_of g p) -> ctx_red d (label_change l) d'.
+Proof.
+move => g l g' d d'. elim/step_ind; intros; rewrite /=.
+- unfold Coherent in H. destruct H,H2. case : a H H0 H1 H2 H3.  intros. move : (H2 p)  (H2 p2)=> [] ef Hf [] et Ht.
+  have : ptcp_from (Action p p2 c0) <> (ptcp_to (Action p p2 c0)). punfold H3.  inversion H3. by simpl in*. intros. 
+  move : (msg_cont_proj x Hf). rewrite /= eqxx. move => [] ef' [] Hef' Hprojef'.
+  move : (msg_cont_proj x Ht). rewrite /= eqxx. have : p2 == p = false. simpl in x.  apply/eqP. 
+  move => HH. apply x. subst. done. move=>->. move => [] et' [] Het' Hprojet. unfold is_full_proj in *.
+  destruct H0,H1.  
+  eapply ctx_red_comm with (e0:= ef)(e1:=et)(e0':= ef')(e1':=et');subst;auto.  
+  rewrite /=.  intros.  move : (part_of_or (SGMsg (Action p p2 c0) u g0) p3)=>[ HH | HH].
+ * move : (H2 p3)=> [] e_big eProj. erewrite H0. erewrite H1. f_equal. done. 
+   apply : msg_cont_other. 2: { apply : H6. }. 
+   apply : non_refl_msg. apply : H3.  apply eProj. done.  done.
+ * intros.  rewrite H4 //= H5 //=. 
+- unfold Coherent in H0. destruct H0, H3. case : a H H0 H1 H2 H3 H4.  intros. move : (H3 p)  (H3 p2)=> [] ef Hf [] et Ht.
+  have : ptcp_from (Action p p2 c0) <> (ptcp_to (Action p p2 c0)). punfold H4.  inversion H4. by simpl in*. intros. 
+  move : (msg_cont_proj x Hf). rewrite /= eqxx. move => [] ef' [] Hef' Hprojef'.
+  move : (msg_cont_proj x Ht). rewrite /= eqxx. have : p2 == p = false. simpl in x.  apply/eqP. 
+  move => HH. apply x. subst. done. move=>->. move => [] et' [] Het' Hprojet. unfold is_full_proj in *.
+  destruct H0,H1.  
+  eapply ctx_red_comm with (e0:= ef)(e1:=et)(e0':= ef')(e1':=et');subst;auto.  
+  rewrite /=.  intros.  move : (part_of_or (SGMsg (Action p p2 c0) u g0) p3)=>[ HH | HH].
+ * move : (H2 p3)=> [] e_big eProj. erewrite H0. erewrite H1. f_equal. done. 
+   apply : msg_cont_other. 2: { apply : H6. }. 
+   apply : non_refl_msg. apply : H3.  apply eProj. done.  done.
+ * intros.  rewrite H4 //= H5 //=. 
+Admitted.
+
+
+Lemma Unroll_contractive : forall g gs, GUnroll g gs -> contractive g.
+Proof.
+move => g gs. unfold GUnroll. intros. punfold SH. UnUnU move : H. elim/SUnravel_ind2. induction H;auto. elim.
+
+Lemma step_goal : forall g  gs gs' l,  step gs l gs'  -> GUnroll g gs -> exists g', GUnroll g' gs' /\ stepi g l g'.
+Proof.
+move => g g' gs gs'. elim. 
+- intros. unfold GUnroll in H. punfold H. remember (mu_height g). elim : n  g Heqn H. 
+ * intros. inversion H;subst. exists g1. split.  pfold. done. done. done. 
+ * intros. inversion H0;subst. exists g1. split. done. done. 
+  simpl in Heqn. inversion Heqn. pclearbot. punfold H1. rewrite -(@mu_height_subst g1 (GRec g1) 0) in H3.  move : (H _ H3 H1)=> [] g'' []. intros. exists g''. split. done.  apply GRI_rec. done.  Print contractive_i. done.
+  intros. subst. pclearbot. apply H2. induction H. 
+ * 
+unfold GUnroll.  elim. 
+- intros. punfold H. inversion H;subst. 
+ * H0 H1. intros. induction H.  elim : H. 
+- intros.
+unfold GUnroll. intros. split. intros. induction H1. 
+-
+punfold H. elim : H.
+- intros. inversion H.
+- intros.
+Lemma step_spec : forall gs l gs', step gs l gs' -> exists g g', GUnroll g gs /\ GUnroll g' gs' /\ step gs l gs'.
+
+
+Lemma stepi_spec : forall g l g', stepi g l g' -> exists gs gs', GUnroll g gs /\ GUnroll g' gs' /\ step gs l gs'.
+Proof.
+move => g l g'.  elim. 
+- intros. rewrite /GUnroll in H,H0.  punfold H. inversion H. subst. punfold H0.  apply/unroll_uniq. apply : H5. apply : H0. done. inversion H5;subst. 
+intros. elim : H.
+- intros.
+(*Error in endpoint type, used mysort instead of value*)
+
+
+Print ptcp.
+Check obind. Check ESelect. Check EReceive. Check ERec. Check nth. Check map.
+Fixpoint project n (g : gType) {struct g} :  endpoint :=
+match g with 
+| GEnd => EEnd
+| GMsg (Action (Ptcp n0) (Ptcp n1) c) u g0 => if n0 == n then ESend c u (project n g0)
+                                             else if n1 == n then EReceive c u (project n g0)
+                                             else project n g0
+| GBranch (Action (Ptcp n0) (Ptcp n1) c) gs =>if n0 == n then ESelect c (map (project n) gs)
+                                             else if n1 == n then EBranch c (map (project  n) gs)
+                                             else match gs with | nil => EEnd | g'::_ => project n g' end
+| GVar n => EVar n
+| GRec g0 => match project n g0 with 
+            | EEnd => EEnd 
+            | e0 => ERec e0
+            end
+end.
+Locate flat_map.
+
+
+Definition pid g := undup (ptcps_of_g g).
+ Check filter.
+
+Definition same_projection_aux n gs := exists e, Forall (fun g => project n g = e) gs.
+
+
+Fixpoint Forall' {A : Type} (P : A -> Prop) l : Prop  :=
+match l with 
+| nil => True 
+| a::l' => P a /\ (Forall' P l')
+end.
+
+
+Fixpoint same_proj g {struct g} :=
+let fix proj_aux gs :=  
+match gs with 
+| nil => True 
+| a::l' => same_proj a /\ (proj_aux l')
+end in
+match g with 
+| GMsg _ _ g0 => same_proj g0
+| GBranch a gs => (forall n, n \notin (ptcps_of_act a) -> exists e,  Forall' (fun g => project n g = e) gs) /\ proj_aux gs
+| GRec g0 => same_proj g0
+| _ => True
+end.
+
+Fixpoint acts_of_g g := 
+match g with 
+| GMsg a _ g0 => a::(acts_of_g g0)
+| GBranch a gs => a::(flatten (map acts_of_g gs))
+| GRec g => acts_of_g g 
+| _ => nil
+end.
+
+Definition no_refl_action g := forall a, a \in (acts_of_g g) -> ptcp_from a != ptcp_to a.
+
+Definition coherent g := no_refl_action g /\ same_proj g /\ (exists sg, GUnroll g sg /\ Linear sg). (*Maybe more requirements, boundness/contractiveness? No, that is implicit in the fact that g can be unrolled to sg*)
+
+(*Next steps continue p.23*)
+
+(*Not guarded co-recursive call, consequence of deletion in projection*)
+(*CoFixpoint project (sg : sgType) (n : nat) :  seType :=
+match sg with 
+| SGEnd => SEEnd
+| SGMsg (Action (Ptcp n0) (Ptcp n1) c) u g0 => if n0 == n then (SESend c u (project g0 n))
+                                              else if n1 == n then (SERec c u (project g0 n))
+                                              else project g0 n
+| _ => SBot
+end.*)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(*represent local type semantics using sets of local types and sets of queues*)
 
 
 (*
