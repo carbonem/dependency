@@ -2,12 +2,124 @@ From mathcomp Require Import all_ssreflect zify.
 
 
 
-Require Import Dep.Global_Syntax Dep.Syntax. 
-Require Import Dep.unscoped. 
+(*Require Import Dep.Global_Syntax Dep.Syntax. 
+Require Import Dep.unscoped. *)
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+
+From mathcomp Require Import finmap.
+
+Inductive ptcp  : Set :=
+  | Ptcp : nat   -> ptcp .
+
+(*Definition nat_of_ptcp (p : ptcp) := let: Ptcp n := p in n.
+Canonical ptctp_newType := Eval hnf in [newType for nat_of_ptcp]. 
+Definition ptcp_eqMixin := [eqMixin of ptcp by <:]. 
+Canonical ptcp_eqType := Eval hnf in EqType ptcp ptcp_eqMixin.
+Definition ptcp_choiceMixin := [choiceMixin of ptcp by <:].
+Canonical ptcp_ChoiceType := Eval hnf in ChoiceType ptcp ptcp_choiceMixin.
+Definition ptcp_countMixin := [countMixin of ptcp by <:].
+Canonical ptcp_countType := CountType ptcp ptcp_countMixin.*)
+
+
+Inductive ch  : Set :=
+  | Ch : nat   -> ch .
+
+(*Definition nat_of_ch (c : ch) := let: Ch n := c in n.
+Canonical ch_newType := Eval hnf in [newType for nat_of_ch].
+Definition ch_eqMixin := [eqMixin of ch by <:]. 
+Canonical ch_eqType := Eval hnf in EqType ch ch_eqMixin. 
+Definition ch_choiceMixin := [choiceMixin of ch by <:].
+Canonical ch_ChoiceType := Eval hnf in ChoiceType ch ch_choiceMixin.
+Definition ch_countMixin := [countMixin of ch by <:].
+Canonical ch_countType := CountType ch ch_countMixin.*)
+
+
+Inductive action  : Set := Action : ptcp -> ptcp -> ch -> action.
+
+Unset Elimination Schemes. 
+Inductive gType  : Set :=
+  | GVar : nat -> gType  
+  | GEnd : gType  
+  | GRec : gType -> gType  
+  | GMsg : action -> value -> gType -> gType  
+  | GBranch : action -> seq.seq gType -> gType  
+ with value  : Set  :=
+  | VSeqSort : seq.seq mysort -> value  
+  | VLT : endpoint -> ptcp  -> value  
+ with mysort  : Set :=
+  | SBool : mysort
+  | SNat : mysort  
+  | SGType : gType -> mysort (*maybe more sorts?*)
+ with endpoint  : Set :=
+  | EVar : nat -> endpoint  
+  | EEnd : endpoint  
+  | ESend : ch -> value -> endpoint -> endpoint  
+  | EReceive : ch -> value  ->  endpoint-> endpoint  
+  | ESelect : ch  -> seq.seq endpoint -> endpoint  
+  | EBranch : ch -> seq.seq  endpoint -> endpoint  
+  | ERec : endpoint -> endpoint .
+Set Elimination Schemes.
+
+Inductive sgType (n : nat) : Set := 
+| SGEnd : sgType n
+| SGMsg : action -> value -> sgType n -> sgType n
+| SGBranch : action -> seq (sgType n)  -> sgType n
+| SGVar n' : n' < n -> sgType n.
+
+Inductive Forall (A : Type) (R : A -> Type) : seq A  -> Prop :=
+    Forall_nil : Forall R nil | Forall_cons : forall (x : A) (l : seq A), R x -> Forall R l -> Forall R (x :: l).
+Hint Constructors Forall. 
+
+(*Structure Bounded (A : Set) n := { b_carrier : A ; vars : A -> seq nat ;  _ : Forall (fun n' => n' < n) (vars b_carrier)}.*)
+Check SGVar.
+
+Fixpoint sg_vars n' (g : sgType n') :=
+match g with 
+| SGEnd => nil 
+| SGMsg _ _ g' => sg_vars g'
+| SGBranch _ gs => flatten (map sg_vars n' gs)
+| SGVar n _ => [::n]
+end.
+
+Check Build_Bounded.
+Canonical bounded_sgType n g (H :  Forall (fun n' => n' < n) (sg_vars g))  := @Build_Bounded sgType n  g sg_vars  H. 
+
+Check bounded_sgType.
+
+
+
+Structure RecType (A : Set) n := {  r_carrier : Bounded A n;
+                                    sigma : seq (Bounded A n);                                 
+                                  _ : size sigma = n}.
+
+Canonical rec_sgType sgType := 
+
+
+
+
+Fixpoint translate (g : gType) : (seq sgType, sgType) :=
+match g with 
+| GEnd => (nil,SGEnd)
+| GRec g' => translate ()
+
+
+Structure RecType n (g : sgType n) := { 
+                                      sigma : seq (sgType n);
+                                      _ : size sigma = n.+1 ;
+                                      _ : Forall (fun a => forall n' (pF : n' < n) , SGVar pF <> a) sigma }.  
+
+
+
+match g with 
+
+Fixpoint translate (e : endpoint) : RecType seType.
+
+ 
+
+Canonical rec_sgType n (g : sgType n) := RecType sgType { n ; g ; 
 
 
 
@@ -929,7 +1041,6 @@ pcofix CIH.
 rewrite unfold_sg unfold_es.  simpl. pfold. constructor. right.  done. 
 Qed.*)
 
-From mathcomp Require Import finmap.
 
 Open Scope fmap_scope.
 Definition is_full_proj (d : {fmap ptcp -> seType}) g (P : ptcp -> Prop) := 
