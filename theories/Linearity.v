@@ -228,6 +228,10 @@ Canonical label_eqType := EqType label label_eqMixin.*)
 
 Definition in_action p a := let: Action p0 p1 k :=a in  (p==p0) || (p==p1).
 
+Definition pred_of_action (a : action) : {pred ptcp} := fun p => in_action p a.
+
+Canonical action_predType := PredType pred_of_action. 
+
 Coercion to_action (l : label) : action := l.1.
 
 (*Definition act_of_label l := 
@@ -238,7 +242,9 @@ end.*)
 
 Definition pred_of_label (l : label) : {pred ptcp} := fun p => in_action p l.
 
-Canonical label_predType := PredType pred_of_label. 
+Canonical label_predType := PredType pred_of_label.  
+
+
 
 
 
