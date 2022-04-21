@@ -150,6 +150,9 @@ match ss with
 | _ => false
 end.*)
 
+
+
+
 Definition indep ss := 
 match ss with 
 | a::a'::ss' => let: one_less := belast a' ss' in path IO a one_less && II (last a one_less) (last a' ss')
@@ -296,7 +299,33 @@ exists mi mo, size mi = size mo /\ size mi = size aa /\ InDep (a0::((mask mi aa)
 Definition exists_depP  (Pm : seq bool -> Prop) (P : seq action -> Prop) a0 aa a1 := exists m, size m = size aa /\ P (a0::((mask m aa))++[::a1]) /\ Pm m.
 Notation exists_dep := (exists_depP (fun _ => True)).
 
+Definition Linear (sg : sgType) := forall s n0 n1 d,
+Tr s sg -> 
+same_ch (nth d s n0) (nth d s n1) -> n0 < n1 -> n1 < size s ->
+exists_dep InDep (nth d s n0) (take n1 (drop n0 s)) (nth d s n1) /\ exists_dep OutDep  (nth d s n0) (take n1 (drop n0 s)) (nth d s n1).  
 
+
+Definition slice (A : Type) (l : seq A) n0 n1 := take n1 (drop n0 l).
+
+Lemma nth_slice : forall (A : Type) (n n0 : nat) (d : A) (s : seq A) x , n <= n0 -> n0 < size s ->  (nth d (take n s ++ x :: drop n s) n0.+1) = nth d s n0.
+Proof.
+intros. rewrite nth_cat size_take. have : n < size s by lia. move => Hn.  rewrite Hn. 
+  have : n0.+1 < n = false by lia. move =>->. have : n0.+1 - n = (n0 - n).+1 by lia. move=>->.  rewrite /=. 
+  rewrite nth_drop. f_equal. lia. 
+Qed.
+
+Definition insert (A : Type) (l : seq A) n x := (take n l) ++ x::(drop n l). 
+
+Lemma slice_insert : forall (A: Type) (s : seq A) n0 n1 n x, n <= n0 ->n <= n1 -> slice s n0 n1 = slice (insert s n x) n0.+1 n1.+1.
+Proof.
+intros. rewrite /insert.
+
+Definition all_indep (sg : sgType) := forall s n0 n1 d,
+Tr s sg -> 
+same_ch (nth d s n0) (nth d s n1) -> n0 < size s -> n1 < size s ->
+exists_dep InDep (nth d s n0) (slice s n0 n1) (nth d s n1).
+
+<<<<<<< Updated upstream
 Definition Linear (sg : sgType) := forall s aa_p a0 aa a1, s = aa_p ++ (a0::(aa++[::a1])) -> 
 Tr s sg -> 
 same_ch a0 a1 -> 
@@ -307,6 +336,18 @@ Tr (aa_p ++ (a0::(aa++[::a1]))) sg ->
 same_ch a0 a1 -> 
 exists_dep InDep a0 aa a1.
 
+=======
+Definition all_outdep (sg : sgType) := forall s n0 n1 d,
+Tr s sg -> 
+same_ch (nth d s n0) (nth d s n1) -> n0 < n1 -> n1 < size s ->
+exists_dep OutDep (nth d s n0) (take n1 (drop n0 s)) (nth d s n1).
+
+(*Definition Linear (sg : sgType) := forall aa_p a0 aa a1, 
+Tr (aa_p ++ (a0::(rcons aa a1))) sg -> 
+same_ch a0 a1 -> 
+exists_dep InDep a0 aa a1 /\ exists_dep OutDep a0 aa a1.
+Print sum.*)
+>>>>>>> Stashed changes
 (*Definition value_nat := (@sum value nat).
 Identity Coercion value_nat_coercion : value_nat >-> sum.*)
 
@@ -377,6 +418,7 @@ move => g vn g'. elim.
   rewrite (size_Forall2 H0). apply : H6. apply : Htr.
 Qed.
 Check InDep.*)
+<<<<<<< Updated upstream
 
 Definition insert (A : Type) (l : seq A) n x := ((take n l) ++ (x::(drop n l))).
 
@@ -400,6 +442,9 @@ Qed.
 
 
 
+=======
+
+>>>>>>> Stashed changes
 Lemma step_tr_in : forall g vn g', step g vn g' -> forall s, Tr s g' -> Tr s g \/ exists n, Tr (insert s n vn.1) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) (take n s).
 Proof.
 move => g vn g'. rewrite /insert. elim.
@@ -589,15 +634,76 @@ case;try done. simpl. intros. rewrite take_cons. case : n H0. by rewrite take0.
 intros. simpl. f_equal. auto. 
 Qed.
 
+Print take.
+
+Lemma take_cat2
+     : forall (n0 : nat) (T : Type) (s1 s2 : seq T),
+       take n0 (s1 ++ s2) = (if n0 <= size s1 then take n0 s1 else s1 ++ take (n0 - size s1) s2).
+Proof.
+intros. rewrite take_cat. destruct (n0 < size s1) eqn:Heqn. 
+
+have : n0 <= size s1 by lia. move=>->.  done.
+ destruct (n0 == size s1) eqn:Heqn2. have : n0 <= size s1 by lia. move=>->. rewrite (eqP Heqn2). have : size s1 - size s1 = 0 by lia.  move=>->. rewrite take0 cats0.   Search _ (take (size _) _). by  rewrite take_size. 
+have : n0 <= size s1 = false by lia. move=>->. f_equal. 
+Qed.
+
+Lemma drop_cat2 
+     : forall (n0 : nat) (T : Type) (s1 s2 : seq T),
+       drop n0 (s1 ++ s2) = (if n0 <= size s1 then drop n0 s1 ++ s2 else drop (n0 - size s1) s2).
+Proof. Admitted.
+
+
+Lemma indep_step : forall g l g', step g l g' -> all_indep g -> all_indep g'.
+Proof.
+intros. rewrite /all_indep. intros. move : (step_tr_in H H1)=>[]. intros. eauto.  
+move => [] n [] Htr Hf. move : Htr. destruct (n <= n0) eqn:Heqn.  
+- move/H0=>HH. specialize HH with n0.+1 n1.+1 d. move : HH. rewrite nth_slice //=; last by lia. 
+  move => HH. 
+  have : slice s n0 n1 = slice (insert s n l.1) n0.+1 n1.+1.
+  
+have : (take n1 (drop n0 s)) = (take n1 (drop n0 (take n s ++ l.1 :: drop n s))). admit.
+ have 
+destruct (size s <= n) eqn:Heqn. 2: {  rewrite take_oversize //= drop_oversize //=.  
+
+intro. move : (H0 _ n0 n1 d Htr). rewrite !nth_cat. have : n0 < size s by lia. move => Hn0.  rewrite Hn0 H4. 
+rewrite size_cat /= !drop_cat Hn0 take_cat size_drop. 
+intros. apply H5. 
+move/H0.  move=> HH. specialize HH with n0 n1.   move/H0=> HH. Search _ (nth _ (_ ++ _) _). move : (HH n0 n1 d)=>HH'. clear HH.
+move : H2.  
+
+move=>->->->. intros. apply HH'.  done. done. rewrite done.
+2 : {  move=> ->. move => HH0. rewrite HH0 in HH'. movee
+rewrite nth_cat size_take. destruct (n < size s) eqn:Heqn.
+-  have : n0 < n by lia. rewrite H3.
+have : same_ch (nth d (take n s ++ l.1 :: drop n s) n0) (nth d (take n s ++ l.1 :: drop n s) n1).
+
+
+move : (@H0  (take n s ++ l.1 :: drop n s) n0 n1 d Htr).  move : Htr. move 0>move : (H0move/H0=> HH. 
 
 Lemma linear_step : forall g l g', step g l g' -> Linear g -> Linear g'.
 Proof.
-intros. rewrite /Linear. intros. move : (step_tr_in2 H H1)=>[]. intros. eauto.  
-move => [] n [] Htr Hf. move : Htr. destruct (n < size aa_p) eqn:Heqn. 
-- rewrite drop_cat Heqn. rewrite -cat_rcons catA.
+intros. rewrite /Linear. intros. move : (step_tr_in H H1)=>[]. intros. eauto.  
+move => [] n [] Htr Hf. move : Htr. move/H0=> HH.  intros. destruct (n <= size aa_p) eqn: Heqn. 
+- rewrite drop_cat2 Heqn. rewrite -cat_rcons catA.
   intros. eauto. 
-- rewrite drop_cat take_cat Heqn.
-  destruct ( n - size aa_p) eqn:Heqn2. rewrite take0 drop0 cats0 -cat_rcons.  intros. eauto. 
+- rewrite drop_cat2 take_cat2 Heqn. destruct (size (aa_p ++ a0::rcons aa a1) <= n) eqn:Heqn2.
+ * have :  size (a0 :: rcons aa a1) <=  n - size aa_p. move : Heqn2. rewrite size_cat /= size_rcons. lia. move => Hs. 
+   rewrite take_oversize //=. move/Tr_app. eauto.
+ * move : Heqn2. rewrite size_cat /= size_rcons. move => Heqn2. rewrite take_cons. destruct (n - size aa_p) eqn:Heqn3; first lia.  
+   rewrite /=. rewrite drop_rcons //=. 2 : { suff : n0.+1 <= (size aa).+1 by lia; rewrite -Heqn3. lia. }  
+   rewrite -rcons_cons. 
+   have :  ((aa_p ++ a0 :: take n0 (rcons aa a1)) ++ rcons (l.1 :: drop n0 aa) a1) =
+           (aa_p ++ a0 :: rcons (((rcons (take n0 (rcons aa a1))) l.1) ++  drop n0 aa) a1).
+   rewrite /= rcons_cat /= -!rcons_cons /=.rewrite -catA.  f_equal. rewrite cat_cons. f_equal. rewrite -!rcons_cat -rcons_cons.
+
+
+
+
+ rewrite -!rcons_cons.  Check _ rcons.
+rewrite -rcons_cat.  rewrite -catA. rewrite -rcons_cat.  rewrite -cat_rcons.
+
+move :Heqn2. rewrite size_cat /= size_rcons. lia. rewrite Heqn2. lia. have : n - size aa_p = false.
+  rewrite take_cons. destruct ( n - size aa_p) eqn:Heqn2. rewrite take0 drop0 cats0 -cat_rcons.  intros. eauto. 
   rewrite /=. Search _ drop. destruct (n0 <= size aa) eqn:Heqn3.
  *  rewrite drop_rcons //=. rewrite -rcons_cons. rewrite -cat_rcons -catA. rewrite -rcons_cat.  
      rewrite cat_rcons. intros. apply H0 in Htr. apply Htr in H2. clear Htr.  destruct H2. split.
@@ -621,7 +727,7 @@ intros. move : H6. move/List.Forall_forall=> HH. specialize HH with xin.  apply 
       rewrite size_cat size_take size_rcons. have : n0 < (size aa).+1 by lia. move => Hn0. rewrite Hn0. rewrite /= size_drop //=.
 
 
-move : Hin Heqb Hsize. rewrite take_rcons //=. intros. rewrite size_take. intros.
+move : Hin Heqb Hsize. rewrite take_rcons //=. rewrite size_take. intros.
      
       rewrite take_rcons in Hin. 
 
