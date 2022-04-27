@@ -536,7 +536,7 @@ elim; try solve [by rewrite /=].
 - intros. rewrite /=. f_equal. apply H. done. 
 Qed.
 
-Fixpoint unf g i := if g is GRec g' then if i is i'.+1 then unf (substitution 0 g' g) i' else g else g.
+Definition unf g i := if g is GRec g' then (substitution i g' g) else g.
 
 
 
