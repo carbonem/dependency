@@ -374,9 +374,9 @@ Canonical action_predType := PredType pred_of_action.
 
 Coercion to_action (l : label) : action := l.1.
 
-Definition pred_of_label (l : label) : {pred ptcp} := fun p => in_action p l.
+(*Definition pred_of_action (l : action) : {pred ptcp} := fun p => in_action p l.*)
 
-Canonical label_predType := PredType pred_of_label.  
+(*Canonical label_predType := PredType pred_of_label.  *)
 
 
 Inductive Tr : seq action -> gType  -> Prop :=
@@ -567,16 +567,33 @@ destruct lb. done. simpl. right. simpl in *.  apply H. lia. lia.
 Qed.
 
 Lemma In3_In2_r : forall (A B C : Type) (a : A) (b : B) (c : C) al bl cl, In3 a b c al bl cl -> In2 b c bl cl.
-Proof. Admitted.
+Proof. move => A B C a b c. elim; try done. case; try done. 
+intros. destruct bl; try done. destruct cl;try done. simpl in H0. destruct H0. destruct H0,H1. subst;auto.
+simpl. auto. simpl. auto. 
+Qed.
 
 Lemma In3_In2_l : forall (A B C : Type) (a : A) (b : B) (c : C) al bl cl, In3 a b c al bl cl -> In2 a b al bl.
-Proof. Admitted.
+Proof. 
+ move => A B C a b c. elim; try done. case; try done. case;try done.
+intros. destruct bl; try done. destruct cl;try done. simpl in H0. destruct H0. destruct H0,H1. subst;auto.
+simpl. auto. simpl. eauto. 
+Qed.
+
 
 Lemma In2_In_l : forall (A B : Type) (a : A) (b : B) al bl, In2 a b al bl -> In a al.
-Proof. Admitted.
+Proof. 
+ move => A B a b. elim; try done. case; try done. 
+intros. destruct bl; try done. simpl in H0. destruct H0. destruct H0. subst;auto.
+simpl. auto. simpl. eauto. 
+Qed.
+
 
 Lemma In2_In_r : forall (A B : Type) (a : A) (b : B) al bl, In2 a b al bl -> In b bl.
-Proof. Admitted.
+Proof.
+ move => A B a b. elim; try done. case; try done. 
+intros. destruct bl; try done. simpl in H0. destruct H0. destruct H0. subst;auto.
+simpl. auto. simpl. eauto. 
+Qed.
 
 Lemma In_in : forall (A : eqType) (a : A) l, In a l <-> a \in l.
 Proof.
@@ -597,10 +614,13 @@ Unset Elimination Schemes.
 Inductive step : gType -> label  -> gType -> Prop :=
  | GR1 (a : action) u g : step (GMsg a u g) (a, inl u) g
  | GR2 a n d gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth d gs n)
- | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l -> step (GMsg a u g1) l (GMsg a u g2)
- | GR4 a l gs gs' : Forall2 (fun g g' => step g l g') gs gs' -> (ptcp_to a) \notin l  ->  step (GBranch a gs) l (GBranch a gs').
+ | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
+ | GR4 a l gs gs' : Forall2 (fun g g' => step g l g') gs gs' -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
+ | GR_rec g l g' : step g[GRec g] l g'  -> step (GRec g) l g'.
 Set Elimination Schemes. 
 Hint Constructors step. 
+
+(*Update induction principle*)
 
 Lemma step_ind
      :  forall P : gType -> label -> gType -> Prop,
@@ -609,19 +629,21 @@ Lemma step_ind
         n < size gs -> P (GBranch a gs) (a, inr n) (nth d gs n)) ->
        (forall (a : action) (u : value) (l : label) (g1 g2 : gType),
         step g1 l g2 ->
-        P g1 l g2 -> ptcp_to a \notin l -> P (GMsg a u g1) l (GMsg a u g2)) ->
+        P g1 l g2 -> ptcp_to a \notin l.1 -> P (GMsg a u g1) l (GMsg a u g2)) ->
        (forall (a : action) (l : label) (gs gs' : seq gType),
         Forall2 (fun g : gType => step g l) gs gs' ->  Forall2 (fun g0 g2 : gType => P g0 l g2) gs gs' -> 
 
-        ptcp_to a \notin l -> P (GBranch a gs) l (GBranch a gs')) ->
+        ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
+       (forall g l g', P g[GRec g] l g' -> P (GRec g) l g') ->
        forall (s : gType) (l : label) (s0 : gType), step s l s0 -> P s l s0.
 Proof.
-move => P H0 H1 H2 H3. fix IH 4.
+move => P H0 H1 H2 H3 H4. fix IH 4.
 move => ss l s1 [].
 intros. apply H0;auto. 
 intros. apply H1;auto.
 intros. apply H2;auto.
 intros. apply H3;auto. elim : f;auto.  
+intros. apply H4;auto.
 Qed.
 
 
@@ -674,10 +696,20 @@ move => g vn g'. rewrite /insert. elim.
   case :  (@index_Forall2 _ _ gs gs' d d n _ H6 H0 _ H8). 
  * intros. left. eauto.
  * move => [] n0 [] HH0 HH1. right. exists n0.+1. rewrite /=. eauto. 
+- intros. destruct (H _ H0). auto. auto. destruct H1,H1. right. exists x. auto.
 Qed.
 
 
-Lemma Tr_app : forall (G : gType) l0 l1, gt_pred 0 0 G -> Tr (l0++l1) G -> Tr l0 G.
+Lemma Tr_app : forall (G : gType) l0 l1, Tr (l0++l1) G -> Tr l0 G.
+Proof.
+intros.  remember (l0 ++ l1). elim : H l0 l1 Heql ;intros.  destruct l0;done. 
+
+destruct l0. done. rewrite cat_cons in Heql. inversion Heql. subst. eauto.  
+destruct l0. done. rewrite cat_cons in Heql. inversion Heql. subst.
+apply : TRBranch;  eauto. constructor. eauto.  
+Qed.
+
+(*Lemma Tr_app : forall (G : gType) l0 l1, gt_pred 0 0 G -> Tr (l0++l1) G -> Tr l0 G.
 Proof.
 intros.  remember (l0 ++ l1). elim : H0 H l0 l1 Heql ;intros.  destruct l0;done. 
 
@@ -686,7 +718,7 @@ destruct l0. done. rewrite cat_cons in Heql. inversion Heql. subst.
 apply : TRBranch;  eauto. apply : H1. simpl in H2. destruct (andP H2).   apply/andP.  split.
 apply (allP H1).  apply mem_nth.  done. apply (allP H3). apply mem_nth. done.
 eauto. constructor. simpl in H. apply : H0. apply : subst_mixin. done. done. eauto.
-Qed.
+Qed.*)
 
 Lemma take_cat2
      : forall (n0 : nat) (T : Type) (s1 s2 : seq T),
@@ -875,7 +907,7 @@ Qed.
 
 
 
-Lemma Linear_step  : forall (g : subgType 0) l g', step g l g' -> Linear g -> Linear g'.
+Lemma Linear_step  : forall g l g', step g l g' -> Linear g -> Linear g'.
 Proof.
 intros. rewrite /Linear. intros. move : (step_tr_in H H1)=>[]. intros. eauto.  
 move => [] n [] Htr Hf. move : Htr. rewrite insert_cat.
@@ -886,7 +918,7 @@ move=>->. eauto.
 rewrite insert_cat. destruct (n0 > size aa) eqn:Heqn3.
 have : n0 <= size aa = false by lia. move=>->. 
 rewrite insert_cons. destruct (n0 - size aa) eqn:Heqn4. lia. rewrite insert_nil.
-have : aa_p ++ a0 :: aa ++ [:: a1; l.1] = (aa_p ++ a0 :: aa ++ [:: a1]) ++ [::l.1]. rewrite -!catA !cat_cons. f_equal. Search _ (_ :: (_ ++ _)). f_equal. rewrite -catA. f_equal. move=>->. eauto. move/Tr_app. move : (valP g).  intros. eauto. 
+have : aa_p ++ a0 :: aa ++ [:: a1; l.1] = (aa_p ++ a0 :: aa ++ [:: a1]) ++ [::l.1]. rewrite -!catA !cat_cons. f_equal. Search _ (_ :: (_ ++ _)). f_equal. rewrite -catA. f_equal. move=>->. eauto. move/Tr_app.  intros. eauto. 
 have : n0 <= size aa by lia. move=>->. intros. (*setup finished*)
 move : (H0 _ _ _ _ Htr H2)=>Hlin.
 move : Hf. have : n = n0.+1 + (size aa_p) by lia. move=>->. rewrite take_cat.
@@ -922,7 +954,7 @@ rewrite /IO_OO in b. case : (orP b).
     have :  (aa_p ++ ((l1 ++ xin :: l2) ++ l.1 :: x2) ++ [:: a1]) =
             ((aa_p ++ l1) ++ (xin::l2 ++ [:: l.1]))++(x2++[::a1]).
     rewrite -!catA; f_equal. f_equal. rewrite /=. f_equal.  rewrite -catA.  f_equal. move=>->.
-    move/Tr_app. move : (valP g). move => H0H  H1H. apply H1H in H0H. move : H0H.
+    move/Tr_app. 
    move/H0. move => HH'. apply HH' in HHH0. destruct HHH0. 
    destruct H5,H5,H10,H11. apply InDep_iff in H10. move : H10.
      case : (split_list (mask x3 l2)). move=>->. rewrite /=.  move/II_in_action=>HII.   exfalso. move : a. rewrite inE.  move/orP=>[].

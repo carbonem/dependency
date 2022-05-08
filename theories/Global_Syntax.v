@@ -51,6 +51,28 @@ Definition ptcp_from (a : action) := let : Action p0 _ _ := a in p0.
 Definition ptcp_to (a : action) := let : Action _ p1 _ := a in p1.
 Definition action_ch (a : action) := let : Action _ _ c := a in c.
 
+
+Inductive dir := Sd | Rd.
+
+Definition dir_eq (d0 d1 : dir) := 
+match d0,d1 with 
+| Sd,Sd => true 
+| Rd,Rd => true
+| _,_ => false 
+end.
+
+Check Equality.axiom.
+
+Lemma dir_axiom : Equality.axiom dir_eq. 
+Proof.
+rewrite /Equality.axiom. move => [] []; rewrite /=;try done;auto. constructor. done. constructor. done. intros. 
+constructor.  done. constructor. done.
+Qed.
+Check EqMixin.
+Definition dir_mixin := EqMixin  dir_axiom.
+Canonical dir_eqType := EqType dir dir_mixin.
+
+
 Unset Elimination Schemes. Check seq.
 Inductive gType  : Set :=
   | GVar : nat -> gType  
@@ -68,10 +90,8 @@ Inductive gType  : Set :=
  with endpoint  : Set :=
   | EVar : nat -> endpoint  
   | EEnd : endpoint  
-  | ESend : ch -> value -> endpoint -> endpoint  
-  | EReceive : ch -> value  ->  endpoint-> endpoint  
-  | ESelect : ch  -> seq endpoint -> endpoint  
-  | EBranch : ch -> seq endpoint -> endpoint  
+  | EMsg : dir -> ch -> value -> endpoint -> endpoint  
+  | EBranch  : dir -> ch  -> seq endpoint -> endpoint  
   | ERec : endpoint -> endpoint .
 Set Elimination Schemes.
 
@@ -114,10 +134,8 @@ Hypothesis Pm_sgtype : forall g : gType, Pg g -> Pm (SGType g).
 
 Hypothesis Pe_var : forall n : nat, Pe (EVar n). 
 Hypothesis Pe_end : Pe EEnd.
-Hypothesis Pe_send : forall (c : ch) (s : value), Pv s -> forall e : endpoint, Pe e -> Pe (ESend c s e).
-Hypothesis Pe_receive :  forall (c : ch) (s : value), Pv s -> forall e : endpoint, Pe e -> Pe (EReceive c s e).
-Hypothesis Pe_sel : forall (c : ch) (l : seq endpoint), P_elist l  -> Pe (ESelect c l).
-Hypothesis Pe_branch : forall (c : ch) (l : seq endpoint), P_elist l -> Pe (EBranch c l).
+Hypothesis Pe_msg : forall (d : dir) (c : ch) (s : value), Pv s -> forall e : endpoint, Pe e -> Pe (EMsg d c s e).
+Hypothesis Pe_branch : forall (d : dir) (c : ch) (l : seq endpoint), P_elist l  -> Pe (EBranch d c l).
 Hypothesis Pe_rec : forall e : endpoint, Pe e -> Pe (ERec e).
 
 Hypothesis P_glist_0 : P_glist nil.
@@ -170,10 +188,8 @@ let fix seq_endpoint_rect ss : P_elist ss :=
 match e with
 | EVar n => Pe_var n
 | EEnd => Pe_end
-| ESend c m e => Pe_send c (value_rect m) (endpoint_rect e)
-| EReceive c m e => Pe_receive c (value_rect m) (endpoint_rect e)
-| ESelect c es => Pe_sel c (seq_endpoint_rect es)
-| EBranch c es => Pe_branch c (seq_endpoint_rect es)
+| EMsg d c m e => Pe_msg d c (value_rect m) (endpoint_rect e)
+| EBranch d c es => Pe_branch d c (seq_endpoint_rect es)
 | ERec e => Pe_rec (endpoint_rect e)
 end.
 
@@ -267,10 +283,8 @@ in
 match e0, e1 with
 | EVar n0, EVar n1 => n0 == n1
 | EEnd , EEnd => true
-| ESend ch0 s0 e0, ESend ch1 s1 e1 => (ch0 == ch1) && (value_eqb s0 s1) && (endpoint_eqb e0 e1)
-| EReceive ch0 s0 e0, EReceive ch1 s1 e1 => (ch0 == ch1) && (value_eqb s0 s1) && (endpoint_eqb e0 e1)
-| ESelect ch0 s0, ESelect ch1 s1 => (ch0 == ch1) && (list_eq s0 s1)
-| EBranch ch0 s0, EBranch ch1 s1 =>  (ch0 == ch1) && (list_eq s0 s1)
+| EMsg d ch0 s0 e0, EMsg d1 ch1 s1 e1 =>  (d == d1) && (ch0 == ch1) && (value_eqb s0 s1) && (endpoint_eqb e0 e1)
+| EBranch d0 ch0 s0, EBranch d1 ch1 s1 => (d0 == d1) && (ch0 == ch1) && (list_eq s0 s1)
 | ERec e0, ERec e1 => endpoint_eqb e0 e1
 | _ , _ => false
 end
@@ -384,32 +398,30 @@ Proof. unfold leib_eq.  apply : mut_ind.
  * by move/eqP=>->. 
  * case. by move=>->. 
 - case; rewrite/=; try done. 
-- move => c s IH e. destruct b; rewrite/=; try done. split. 
- move/andP =>[] /andP [] /eqP -> /IH -> /H ->. done.
-  case. move=>->->->. by rewrite eqxx !refl_eqbs. 
-
-- intros. case_filter_on b.  rewrite /=. split. 
+- move => d c s IH e. destruct b; rewrite/=; try done. split. 
+ by move/andP =>[] /andP [] /andP [] /eqP -> /eqP -> /IH -> /H ->.  
+  case. move=>->->->->. by rewrite !eqxx !refl_eqbs. 
+(*- intros. case_filter_on b.  rewrite /=. split. 
  * move/andP=>[] /andP [] /eqP -> /H -> /H0 ->. done. 
-   case. move=>->->->. by rewrite eqxx !refl_eqbs.
+   case. move=>->->->. by rewrite eqxx !refl_eqbs.*)
 
 - intros. case_filter_on b.  rewrite /=. split. 
-  * move/andP=>[] /eqP ->. intros. f_equal.
+  * move/andP=>[] /andP [] /eqP -> /eqP ->. intros. f_equal.
    elim : l l0 H b. case;done. 
    intros. elim : l0 b; first done. intros. move : (andP b) =>[].  intros.
    inversion H0.  subst. f_equal;auto.
-   apply/H4. done. auto. 
-  * case. move =>->->. rewrite eqxx //=.
+   apply/H4. done. 
+  * case. move =>->->->. rewrite !eqxx //=.
     elim : l0 H. auto.  rewrite /=. intros. rewrite refl_eqbs //=.
      apply/H. auto. 
-
-- intros. case_filter_on b.  rewrite /=. split. 
+(*- intros. case_filter_on b.  rewrite /=. split. 
   * move/andP=>[] /eqP ->. intros. f_equal.
    elim : l l0 H b. case;done. 
    intros. elim : l0 b; first done. intros. move : (andP b) =>[].  intros. inversion H0. f_equal;auto.
    apply/H4. done. auto. 
   * case. move =>->->. rewrite eqxx //=.
     elim : l0 H. auto.  rewrite /=. intros. rewrite refl_eqbs //=.
-     apply/H. auto. 
+     apply/H. auto. *)
 
 - intros. case_filter_on b. rewrite /=. rewrite H. split;auto.
   move=>->. done.
