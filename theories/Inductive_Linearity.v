@@ -249,7 +249,7 @@ Lemma step_ind
         Forall (fun p => step p.1 l p.2) (zip gs gs') ->  Forall (fun p => P p.1 l p.2) (zip gs gs') -> 
 
         ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
-       (forall g l g', P g[GRec g] l g' -> P (GRec g) l g') ->
+       (forall g l g', step g[GRec g] l g' -> P g[GRec g] l g' -> P (GRec g) l g') ->
        forall (s : gType) (l : label) (s0 : gType), step s l s0 -> P s l s0.
 Proof.
 move => P H0 H1 H2 H3 H4. fix IH 4.
@@ -281,7 +281,7 @@ move => g vn g'. rewrite /insert. elim.
   destruct H4,H4. right. exists x.+1. simpl.  split;eauto. 
   rewrite -nth_zip //=. apply/mem_nth. rewrite size_zip minnE H.
   have :  size gs' - (size gs' - size gs') = size gs' by lia. by move=>->.
-- intros. destruct (H _ H0). auto. auto. destruct H1,H1. right. exists x. auto.
+- intros. destruct (H0 _ H1). auto. auto. destruct H2,H2. right. exists x. auto.
 Qed.
 
 
