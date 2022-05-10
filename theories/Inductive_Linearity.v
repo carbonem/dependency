@@ -8,288 +8,17 @@ Unset Printing Implicit Defensive.
 From deriving Require Import deriving.
 Require Import Dep.Global_Syntax.
 
-
-Ltac iflia := match goal with 
-                | [ |- context[if ?X then _ else _ ]] => have : X by subst; lia
-                | [ |- context[if ?X then _ else _ ]] => have : X = false by subst ; lia
+Ltac case_if := match goal with 
+                | [ |- context[if ?X then _ else _ ]] => have : X by subst
+                | [ |- context[if ?X then _ else _ ]] => have : X = false by subst 
 
                 | [ |- context[if ?X then _ else _ ]] => let H := fresh in destruct X eqn:H
 
                 end; try (move=>->).
 
+Ltac iflia := case_if;try lia.
 
-
-Lemma contractive_lt : forall (g : gType) i j, j < i -> contractive_i i g -> contractive_i j g.
-Proof.
-elim;auto.
-- rewrite /=. move => n i j. move/ltP=> + /leP;intros.  apply/leP. lia. 
-- move => g H.  rewrite /=. intros. have : j.+1 < i.+1. apply/ltP. move : H0. move/ltP. lia. eauto. 
-Qed.
-
-Lemma contractive_le : forall (g : gType) i j, j <= i -> contractive_i i g -> contractive_i j g.
-Proof.
-intros. destruct (eqVneq j i). subst. done. 
-have : j < i by lia. intros. eauto using contractive_lt.
-Qed.
-
-
-
-Lemma mu_height_subst : forall g0 g1  i, contractive_i (S i) g0 -> mu_height (substitution i g0 g1) = mu_height g0.
-Proof. 
-elim; try solve [by rewrite /=].
-- rewrite /=. intros. case : (eqVneq n i) H. move=>->. by rewrite ltnn. by rewrite /=. 
-- intros. rewrite /=. f_equal. apply H. done. 
-Qed.
-
-
-
-
-Lemma bound_lt : forall (g : gType) i j, i < j -> bound_i i g -> bound_i j g.
-Proof. 
-elim.
-- rewrite /=;auto. move=>n i j.  move=> /leP H /ltP H1. apply/ltP.  lia. 
-- rewrite /=;auto. intros. apply : (@H i.+1 j.+1); done. 
-- rewrite /=;auto. 
-- intros. move : H1. rewrite /=.  move/allP=>H2. apply/allP. move=> l' Hin. move : (H2 l' Hin). 
-  apply H;auto. 
-Qed.
-
-Lemma bound_le : forall (g : gType) i j, i <= j -> bound_i i g -> bound_i j g.
-Proof. intros. destruct (eqVneq i j). by subst. have : i < j by lia. 
-eauto using bound_lt.
-Qed.
-
-Lemma bound_0 : forall (g : gType) j, bound g -> bound_i j g.
-Proof.
-intros. case : j. done. intros. apply  : (@bound_lt _ 0). done. done.
-Qed.
-Check max.
-
-Lemma subst_none : forall (g g': gType) i j, i <= j -> (bound_i i g) -> (substitution j g g') = g.   
-Proof.
-elim; intros;rewrite /=;try done.
--  iflia.  simpl in H0.  lia.
-- done.
-- f_equal. apply : H. have : i.+1 <= j.+1 by lia. intros. apply : x. done.
-- rewrite (H g' i j) //=.
-- f_equal. elim : l H H1. done.
-  intros. rewrite /=. f_equal. apply  : H1. by rewrite inE eqxx. apply : H0. simpl in H2. apply (andP H2). apply H.
-  intros.  apply : H1. by rewrite inE H3 orbC. apply : H4. done. simpl in *. apply (andP H2). 
-Qed.
-
-(*Lemma bound_subst2 : forall (g g': gType) i, (bound_i i g') -> (bound_i i.+1 g) = bound_i i (substitution i g g').   
-Proof.
-elim;intros; rewrite /=;try done.
-- iflia. have : n < i.+1 by lia. move=>-> /=.  rewrite H. done. rewrite /=. destruct (n < i) eqn:Heqn. have : n < i.+1 by lia. move=>->. done. lia.
-- apply : H
--> bound_i j g' -> bound_i (i + j) (substitution i g g').*)
-
-Lemma bound_subst : forall (g g': gType) i j, bound_i i.+1 g -> bound_i j g' -> bound_i (i + j) (substitution i g g').
-Proof.
-elim.
--  rewrite /=. intros. iflia. move : H0. rewrite -(eqP H1). intros. apply : bound_le. 2: { apply : H0. }  lia. 
-  have : n < i by lia. intros. rewrite /bound_i. lia.
-- rewrite /=. done. 
-- rewrite /=. intros. have : (i + j).+1 = (i.+1 + j) by lia. move=>->. apply H. done. done.
-- rewrite /=. intros. auto. 
-- rewrite /=. intros. move : (allP H0)=> H2. apply/allP. move => l' /mapP. case. intros. 
-  subst. apply H;auto.
-Qed.
-
-Lemma bound_subst2 : forall (g g': gType) i j, j <= i -> bound_i i.+1 g -> bound_i j g' -> bound_i i (substitution i g g').
-Proof.
-elim.
--  rewrite /=. intros. iflia. apply : bound_le. 2 : { eauto. } lia. simpl. lia. 
-- done. 
-- intros. simpl. apply : H. 3: {  eauto. } lia. done. 
-- rewrite /=. intros. auto. 
-- rewrite /=. eauto. 
-- intros. simpl in *. move : (allP H1)=> HH2. apply/allP. move => l' /mapP. case. intros. 
-  subst. eauto. 
-Qed.
-
-(*Lemma contractive_subst2 : forall (g g': gType) i j k, j <= i -> k <= i -> contractive_i i.+1 g -> contractive_i j g' -> contractive_i k (substitution i g g').
-Proof.
-elim.
--  rewrite /=. intros. iflia. simpl. lia. 
-- done. 
-- intros. simpl. apply : H. 3: {  eauto. } 3 : {  eauto. } lia. lia. 
-- rewrite /=. intros. apply : contractive_le. 2 : { apply : H. 4 : { eauto. } lia. apply : H1. eauto. lia. 3 : { eauto. } lia. apply : H. eauto. 
-- intros. simpl in *. move : (allP H1)=> HH2. apply/allP. move => l' /mapP. case. intros. 
-  subst. eauto. *)
-(*Lemma contractive_0 : forall (g : gType) i,  contractive_i i g -> contractive g.
-Proof.
-move=> g. case. done. intros.  apply : contractive_lt; last eauto. done.
-Qed.*)
-
-
-
-Lemma bound_contractive_subst : forall (g g': gType) i i2 j, bound_i i.+1 g -> contractive_i j g -> bound_i i2 g' -> (forall j, contractive_i j g') -> 
-contractive_i j (substitution i g g').
-Proof.
-elim.  (try solve [rewrite /= ;auto]).
-- rewrite/=. move => v g' i j. case : (eqVneq v i).  done. simpl. done.
-- rewrite /=. intros. done. 
-- rewrite /=. intros. apply : H. done. done. apply : H2. apply : H3. 
-- rewrite /=.  intros. apply : H;eauto. 
-- rewrite /=. intros. apply/allP. move=> gsub /mapP. case. intros. subst. 
-  apply : H;eauto. auto using (allP H0), (allP H1). auto using (allP H1). 
-Qed.
-
-Lemma bound_cont_eq : forall (g : gType) i, bound_i i g -> contractive_i i g -> (forall j, contractive_i j g).
-Proof.
-elim; rewrite/=;auto.
-- rewrite /=. move => v i /ltP + /leP. lia. 
-- rewrite /=. intros. eauto. 
-Qed.
-
-
-Lemma subst_mixin : forall g0 g1 n, gt_pred n.+1 n.+1  g0 -> gt_pred n n g1 -> gt_pred n n (substitution n g0 g1).
-Proof.
-intros.  move : (andP H)=>[]. move : (andP H0)=>[]. intros. apply/andP. split.
-apply : bound_subst2. 3 : { eauto. } lia. eauto. 
-apply : bound_contractive_subst;eauto. 
-apply : contractive_lt. 2 : { eauto. } lia. apply : bound_cont_eq. 
-eauto. eauto. 
-Defined.
-
-
-Lemma unf_mixin : forall (g : gType) (n : nat), gt_pred n n g -> gt_pred n n (unf g n).
-Proof.
-intros. rewrite /unf. destruct g. move : (andP H)=>[];intros.  apply/andP. split. simpl. simpl in a. lia. simpl in *. lia. 
-- done.
-- simpl in *. apply subst_mixin.  done. done. 
-  move : (andP H)=>[];intros. apply/andP. split. apply : bound_le. 2 : { eauto. } lia. done. 
-- simpl in *. move : (andP H)=>[];intros. apply/andP. split. 
-  apply/allP. move=> l' Hin. apply : bound_le. 2 : {  apply (allP a0).  done. } lia. done.
-Qed.
-
-Lemma iter_mixin : forall k (g : gType) (n : nat), gt_pred n n g -> gt_pred n n (iter k (fun g => unf g n) g).
-Proof. elim;rewrite /=;intros. apply/andP.  destruct (andP H). split;auto. 
-apply unf_mixin. apply H. done. 
-Qed.
-
-
-Lemma mu_height_unf : forall n g k, k <= n -> gt_pred n n g -> (mu_height g).-1 = mu_height (unf g k).
-Proof.
-move => n  g. rewrite /=. elim : g n; try solve [intros;rewrite /=;done].
-- intros. rewrite /=. have : k <= n.+1 by lia.  intros. apply H in x;auto. rewrite mu_height_subst. done.
-  apply : contractive_le. 2 : { apply (andP H1). } lia. 
-Qed.
-
-
-Lemma mu_height_iter_unf : forall k n g , gt_pred n n g -> (mu_height g) - k = (mu_height (iter k (fun g => unf g n) g)). 
-Proof.
-elim;intros. rewrite /=. lia.
-rewrite /=. have : mu_height g - n.+1 = (mu_height g - n).-1 by lia. move=>->. 
-erewrite H. 2 : {  eauto. } erewrite mu_height_unf. done. 2 : { apply iter_mixin. done. } lia.
-Qed.
-
-
-Lemma iter_unf_not_rec : forall n sg k, gt_pred n n sg -> mu_height sg <= k -> forall g, iter k (fun g => unf g n) sg <> GRec g.
-Proof.
-intros. simpl in *. apply (mu_height_iter_unf k) in H. move : H. 
-have : mu_height sg - k  = 0 by lia. move=>->. intros. destruct ((iter k (fun g => unf g n) sg));try done.
-Qed.
-
-Notation full_unf n g := (iter (mu_height g) (fun g' => unf g' n) g).
-
-
-Section SubgType.
-Variable n : nat.
-
-Inductive subgType : Type := SubgType g of bound_i n g && contractive_i n g.
-
-Coercion gType_of_subgType sg := let: @SubgType g _  := sg in g.
-
-Canonical subgType_subType := [subType for gType_of_subgType].
-Definition subgType_eqMixin := Eval hnf in [eqMixin of subgType by <:].
-Canonical subgType_eqType := Eval hnf in EqType subgType subgType_eqMixin.
-
-Check subgType_ind.
-
-Lemma SGEnd_mixin : gt_pred n n GEnd.
-Proof. done. Qed.
-
-Definition SGEnd := SubgType SGEnd_mixin.
-
-
-
-Lemma SGMsg_mixin : forall a u g, gt_pred n n g -> gt_pred n n (GMsg a u g).
-Proof. intros. rewrite /=.  move : (andP H)=>[]-> /=. eauto using contractive_le.
-Defined.
-
-Definition SGMsg a u (g : subgType) := SubgType (SGMsg_mixin a u (valP g)).
-
-
-Lemma SGBranch_mixin : forall a gs, all (gt_pred n n) gs -> gt_pred n n (GBranch a gs).
-Proof.
-move => a gs. intros. have : all (bound_i n) gs && (all (contractive_i n) gs). 
-move : H. elim : gs. done. intros. rewrite /=.  simpl in H0. move : H0. move/andP=>[] /andP. move=>[]. intros. rewrite a1 b /=. auto.
-move/andP=>[].  intros. rewrite /= a0 /=.  apply/allP. move=> x Hin.  apply : contractive_le. 2: { apply (allP b). done. } lia. 
-Defined.
-
-Lemma seq_sub : forall (gs : seq subgType), all (gt_pred n n) (map val gs).
-Proof. elim.  done. intros. simpl. destruct a. rewrite /= i /=. done.
-Qed.
-
-Definition SGBranch  a (gs : seq subgType) := SubgType (SGBranch_mixin a (seq_sub gs)). 
-
-
-Lemma SGRec_mixin : forall g, gt_pred n.+1 n.+1 g ->  gt_pred n n (GRec g).
-Proof.
-intros. rewrite /=. done.
-Defined.
-End SubgType.
-
-Definition SGRec n (g : subgType n.+1) := SubgType (@SGRec_mixin n g (valP g)).
-
-Lemma full_unf_sub : forall n (g : subgType n) g', (full_unf n g) <> GRec g'.
-Proof.
-intros. apply iter_unf_not_rec. destruct g. simpl in *. done. lia.
-Qed.
-
-
-(*Lemma subst_mixin : forall g0 g1 n, gt_pred n.+1 n.+1  g0 -> gt_pred n n g1 -> gt_pred (n+n) n (substitution n g0 g1).
-Proof.
-intros.  move : (andP H)=>[]. move : (andP H0)=>[]. intros. apply/andP. split.
-apply : bound_subst. done. done.
-apply : bound_contractive_subst.
-done. apply : contractive_lt. 2 : { eauto. } lia. eauto. apply : bound_cont_eq. 
-eauto. eauto. 
-Defined.*)
-
-(*Definition sub_subst (g0 : subgType 1) (g1 : subgType 0) := SubgType (@subst_mixin g0 g1 (valP g0) (valP g1)).*)
-
-
-Inductive Forall2 (A B : Type) (R : A -> B -> Type) : seq A -> seq B -> Prop :=
-    Forall2_nil : Forall2 R nil nil | Forall2_cons : forall (x : A) (y : B) (l : seq A) (l' : seq B), R x y -> Forall2 R l l' -> Forall2 R (x :: l) (y :: l').
-Hint Constructors Forall2. 
-
-Inductive Forall3 (A B C : Type) (R : A -> B -> C -> Type) : seq A -> seq B -> seq C -> Prop :=
-    Forall3_nil : Forall3 R nil nil nil | Forall3_cons : forall (x : A) (y : B) (z : C) (l : seq A) (l' : seq B) (l'' : seq C), R x y z -> Forall3 R l l' l'' -> Forall3 R (x :: l) (y :: l') (z ::l'').
-Hint Constructors Forall3.
-
-Lemma index_Forall : forall (A: Type) (l0 : seq A) d0 n (P : A  -> Prop), n < size l0 -> Forall P l0 -> P (nth d0 l0 n).
-Proof.
-intros. move : H0 d0 n H. elim.
-intros.  done. intros. destruct n. simpl. done. simpl. auto. 
-Qed.
-
-
-Lemma size_Forall2 : forall (A B : Type) (l0 : seq A) (l1 : seq B) P, Forall2 P l0 l1 -> size l0 = size l1. 
-Proof. intros. induction H;simpl;auto. Qed.
-
-Lemma index_Forall2 : forall (A B : Type) (l0 : seq A) (l1 : seq B) d0 d1 n (P : A -> B -> Prop), n < size l0 -> Forall2 P l0 l1 -> P (nth d0 l0 n) (nth d1 l1 n).
-Proof.
-intros. move : H0 d0 d1 n H. elim.
-intros.  done. intros. destruct n. simpl. done. simpl. auto. 
-Qed.
-
-Lemma Forall2_Forall : forall (A B : Type) (l0 : seq A) (l1 : seq B) (P : A -> Prop), Forall2 (fun a b => P a) l0 l1 -> Forall P l0.
-Proof.
-intros. elim : H;auto.
-Qed.
+Ltac rifliad := repeat (iflia; try done).
 
 
 Definition label := (action * (value + nat))%type.
@@ -331,16 +60,6 @@ Inductive OutDep : seq action -> Prop :=
  | OD_cons a0 a1 aa: IO_OO a0 a1  -> OutDep (a1::aa) -> OutDep (a0::a1::aa).
 Hint Constructors OutDep.
 
-Fixpoint dep (R : action -> action -> bool) ss := 
-match ss with 
-| nil => false 
-| a::s' => match s' with 
-          | a'::nil => R a a' 
-          | a'::ss' => (R a a') && dep R s'
-          | _ => false
-        end
-        
-end.
 
 Definition outdep ss :=
 match ss with 
@@ -373,10 +92,6 @@ Definition pred_of_action (a : action) : {pred ptcp} := fun p => in_action p a.
 Canonical action_predType := PredType pred_of_action. 
 
 Coercion to_action (l : label) : action := l.1.
-
-(*Definition pred_of_action (l : action) : {pred ptcp} := fun p => in_action p l.*)
-
-(*Canonical label_predType := PredType pred_of_label.  *)
 
 
 Inductive Tr : seq action -> gType  -> Prop :=
@@ -469,7 +184,7 @@ Proof. move => A. elim;intros; destruct n; rewrite /delete /=;try done. Qed.
 Lemma size_delete : forall (A : Type) (l : seq A) n, size (delete l n) = if n < size l then (size l).-1 else size l.
 Proof. move => A. elim;intros. rewrite delete_nil /=. destruct n;done. 
 rewrite delete_cons /=. destruct n eqn:Heqn. by iflia. 
-subst. rewrite /= H. iflia. iflia. lia. by iflia. 
+subst. rewrite /= H. rifliad.  
 Qed.
 
 Lemma delete_insert : forall (A : Type) aa n (x : A), (delete (insert aa n x) n) = if n <= size aa then aa else insert aa n x.
@@ -500,100 +215,8 @@ Proof.
 move => A. elim. done.  
 intros. rewrite delete_cons. destruct n. by  rewrite insert0 /=. rewrite insert_cons. f_equal. simpl in H0.  apply H. lia. 
 Qed.
-Lemma In_nth : forall (A : Type) (a : A) l d, In a l -> exists n, a = nth d l n /\ n < size l.
-Proof.
-move => A a. elim. done.
-intros. simpl in H0. destruct H0. subst. exists 0. done. apply (H d) in H0. destruct H0. exists (x.+1). simpl. done.
-Qed.
-Check Tr.
-
-Fixpoint In2 (A B: Type) (a : A) (b : B) (la : seq A) (lb : seq B) := 
-match la,lb with
-| nil,nil => False 
-| a'::la',b'::lb' => a=a' /\ b = b' \/ In2 a b la' lb'
-| _,_ => False 
-end.
-
-Lemma In2_swap  : forall (A B : Type) a b (la : seq A) (lb : seq B), In2 a b la lb -> In2 b a lb la.
-Proof.
-move => A B a b. elim. case. done. done.
-move => a0 l IH []. done. intros. simpl. simpl in H.  destruct H. destruct H. subst. auto.
-auto.
-Qed.
-
-(*Lemma In2_swap_aux  : forall (A B : Type) (P : A -> B -> Prop) a b (la : seq A) (lb : seq B), In2 a b la lb -> In2 b a lb la.*)
-
-Lemma Forall2_forall : forall (A B : Type) (P : A -> B -> Prop) (la : seq A) (lb : seq B), Forall2 P la lb <-> (size la = size lb /\ forall a b, In2 a b la lb -> P a b).
-Proof.
-move => A B P la lb. split.
-- elim.
- * done.  
- * intros. destruct H1. split. simpl. rewrite H1. done. intros. simpl in H3. destruct H3. destruct H3. subst. done. apply H2. done. 
-elim : la lb. case. done. intros. destruct H. done.
-move => a l H [] . simpl. case. done. 
-intros. destruct H0. constructor. apply H1. simpl. auto.  apply H. simpl in H0.  inversion H0.  split;auto. intros. apply H1. simpl. auto. 
-Qed.
-
-Fixpoint In3 (A B C: Type) (a : A) (b : B) (c : C) (la : seq A) (lb : seq B) (lc : seq C) := 
-match la,lb,lc with
-| nil,nil,nil => False 
-| a'::la',b'::lb',c'::lc' => a=a' /\ b = b' /\ c = c' \/ In3 a b c la' lb' lc'
-| _,_,_=> False 
-end.
-
-Lemma Forall3_forall : forall (A B C : Type) (P : A -> B -> C -> Prop) (la : seq A) (lb : seq B)(lc : seq C), Forall3 P la lb lc <-> (size la = size lb /\ size lb = size lc) /\ forall a b c, In3 a b c la lb lc -> P a b c.
-Proof.
-move => A B C P la lb lc. split.
-- elim.
- * done.  
- * intros. destruct H1. split. simpl. destruct H1. rewrite H1 H3. done. intros. simpl in H3. destruct H3. 
-  ** destruct H3,H3, H4. subst. done. auto. 
-elim : la lb lc. case. case. done. intros. destruct H,H. done. intros. destruct H,H. done.
-move => a l H []. simpl. intros. destruct H0,H0. done. 
-intros. destruct lc.  destruct H0,H0. done. destruct H0,H0. constructor. apply H1. simpl. auto.  apply H. simpl in H0.  inversion H0. simpl in H2.   inversion H2. rewrite -H4. split;auto. intros. apply : H1. simpl. auto. 
-Qed.
-
-Lemma In_nth2 : forall (A : Type) (l : seq A) (d : A) n, n < size l -> In (nth d l n) l.
-Proof.
-move => A. elim. done.
-intros. destruct n. simpl.  auto. simpl in *. have : n < size l by lia.  move/H. auto. 
-Qed.
-
-Lemma In2_nth2 : forall (A  B: Type) (l : seq A) (lb : seq B) (d : A) (db : B) n, n < size l -> size l = size lb -> In2 (nth d l n) (nth db lb n) l lb.
-Proof.
-move => A B. elim. done.
-intros. destruct n. simpl. destruct lb.   done. auto. 
-destruct lb. done. simpl. right. simpl in *.  apply H. lia. lia. 
-Qed.
-
-Lemma In3_In2_r : forall (A B C : Type) (a : A) (b : B) (c : C) al bl cl, In3 a b c al bl cl -> In2 b c bl cl.
-Proof. move => A B C a b c. elim; try done. case; try done. 
-intros. destruct bl; try done. destruct cl;try done. simpl in H0. destruct H0. destruct H0,H1. subst;auto.
-simpl. auto. simpl. auto. 
-Qed.
-
-Lemma In3_In2_l : forall (A B C : Type) (a : A) (b : B) (c : C) al bl cl, In3 a b c al bl cl -> In2 a b al bl.
-Proof. 
- move => A B C a b c. elim; try done. case; try done. case;try done.
-intros. destruct bl; try done. destruct cl;try done. simpl in H0. destruct H0. destruct H0,H1. subst;auto.
-simpl. auto. simpl. eauto. 
-Qed.
 
 
-Lemma In2_In_l : forall (A B : Type) (a : A) (b : B) al bl, In2 a b al bl -> In a al.
-Proof. 
- move => A B a b. elim; try done. case; try done. 
-intros. destruct bl; try done. simpl in H0. destruct H0. destruct H0. subst;auto.
-simpl. auto. simpl. eauto. 
-Qed.
-
-
-Lemma In2_In_r : forall (A B : Type) (a : A) (b : B) al bl, In2 a b al bl -> In b bl.
-Proof.
- move => A B a b. elim; try done. case; try done. 
-intros. destruct bl; try done. simpl in H0. destruct H0. destruct H0. subst;auto.
-simpl. auto. simpl. eauto. 
-Qed.
 
 Lemma In_in : forall (A : eqType) (a : A) l, In a l <-> a \in l.
 Proof.
@@ -602,20 +225,12 @@ intros. rewrite /= inE. split. case. move=>->. rewrite eqxx. done. move/H. move=
 move/orP. case. move/eqP. move=>->. auto. move/H. auto. 
 Qed.
 
-(*Lemma Tr_unf : forall g s,  Tr s g[GRec g] -> Tr s (GRec g).
-Proof.
-intros. constructor.*)
-
-
-
-
-
-Unset Elimination Schemes. 
+Unset Elimination Schemes. Check Forall.
 Inductive step : gType -> label  -> gType -> Prop :=
  | GR1 (a : action) u g : step (GMsg a u g) (a, inl u) g
  | GR2 a n d gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth d gs n)
  | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
- | GR4 a l gs gs' : Forall2 (fun g g' => step g l g') gs gs' -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
+ | GR4 a l gs gs' : size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
  | GR_rec g l g' : step g[GRec g] l g'  -> step (GRec g) l g'.
 Set Elimination Schemes. 
 Hint Constructors step. 
@@ -630,8 +245,8 @@ Lemma step_ind
        (forall (a : action) (u : value) (l : label) (g1 g2 : gType),
         step g1 l g2 ->
         P g1 l g2 -> ptcp_to a \notin l.1 -> P (GMsg a u g1) l (GMsg a u g2)) ->
-       (forall (a : action) (l : label) (gs gs' : seq gType),
-        Forall2 (fun g : gType => step g l) gs gs' ->  Forall2 (fun g0 g2 : gType => P g0 l g2) gs gs' -> 
+       (forall (a : action) (l : label) (gs gs' : seq gType), size gs = size gs' ->
+        Forall (fun p => step p.1 l p.2) (zip gs gs') ->  Forall (fun p => P p.1 l p.2) (zip gs gs') -> 
 
         ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
        (forall g l g', P g[GRec g] l g' -> P (GRec g) l g') ->
@@ -646,43 +261,11 @@ intros. apply H3;auto. elim : f;auto.
 intros. apply H4;auto.
 Qed.
 
-
-(*Really nice, define reduction with smart constructors, no exotic terms*)
-(*Unset Elimination Schemes.
-Inductive step : subgType 0 -> label  -> subgType 0 -> Prop :=
- | GR1 (a : action) u g : step (SGMsg a u g) (a, inl u) g
- | GR2 a n d gs : n < size gs -> step (SGBranch a gs) (a, inr n) (nth d gs n)
- | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l -> step (SGMsg a u g1) l (SGMsg a u g2)
- | GR4 a l gs gs' : Forall2 (fun g g' => step g l g') gs gs' -> (ptcp_to a) \notin l  ->  step (SGBranch a gs) l (SGBranch a gs')
- | GR_rec g l g' : step (sub_subst g (SGRec g)) l g'  -> step (SGRec g) l g'.
-Set Elimination Schemes. 
-Hint Constructors step. 
+Lemma Forall_forall
+     : forall (A : eqType) (P : A -> Prop) (l : seq A), Forall P l <-> (forall x : A, x \in l -> P x).
+Proof. intros. rewrite List.Forall_forall. split;intros;auto;by apply/H/In_in. Qed.
 
 
-Lemma step_ind :  forall P : subgType 0 -> label -> subgType 0 -> Prop,
-       (forall (a : action) (u : value) (g : subgType 0), P (SGMsg a u g) (a, inl u) g) ->
-       (forall (a : action) (n : nat) (d : subgType 0) (gs : seq (subgType 0)),
-        n < size gs -> P (SGBranch a gs) (a, inr n) (nth d gs n)) ->
-       (forall (a : action) (u : value) (l : label) (g1 g2 : subgType 0),
-        step g1 l g2 -> P g1 l g2 -> ptcp_to a \notin l -> P (SGMsg a u g1) l (SGMsg a u g2)) ->
-       (forall (a : action) (l : label) (gs gs' : seq (subgType 0)),
-        Forall2 (fun g : subgType 0 => [eta step g l]) gs gs' -> Forall2 (fun g0 g1 => P g0 l g1) gs gs' -> ptcp_to a \notin l -> P (SGBranch a gs) l (SGBranch a gs')) ->
-       (forall (g : subgType 1) (l : label) (g' : subgType 0),
-        step (sub_subst g (SGRec g)) l g' -> P (sub_subst g (SGRec g)) l g' -> P (SGRec g) l g') ->
-       forall (s : subgType 0) (l : label) (s0 : subgType 0), step s l s0 -> P s l s0.
-Proof.
-move => P H0 H1 H2 H3 H4. fix IH 4.
-move => g l g0  [].
-intros. apply H0;auto. 
-intros. apply H1;auto.
-intros. apply H2;auto.
-intros. apply H3;auto. elim : f;auto.  
-intros. apply H4;auto.
-Qed.*)
-
-(*Lemma test : forall(a b c : subgType 0),  a = b -> b = c -> a = c.
-Proof.
-intros. rewrite -H in H0. *)
 Lemma step_tr_in : forall g vn g', step g vn g' -> forall s, Tr s g' -> Tr s g \/ exists n, Tr (insert s n vn.1) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) (take n s).
 Proof.
 move => g vn g'. rewrite /insert. elim.
@@ -692,10 +275,12 @@ move => g vn g'. rewrite /insert. elim.
   inversion H2. subst. move : (H0 _ H4)=>[];auto.
   move=> [] n [].  intros. right. exists n.+1. simpl. auto. 
 - intros. destruct s; auto.
-  inversion H2. subst. rewrite -(size_Forall2 H0) in H6.  
-  case :  (@index_Forall2 _ _ gs gs' d d n _ H6 H0 _ H8). 
- * intros. left. eauto.
- * move => [] n0 [] HH0 HH1. right. exists n0.+1. rewrite /=. eauto. 
+  inversion H2. subst. inversion H3.  subst. eapply Forall_forall in H1. 
+  Existential 2:=(nth d gs n,nth d gs' n). simpl in H1.
+  apply H1 in H10.  destruct H10. left. rewrite -H in H8.  econstructor. apply : H8. apply : H4. 
+  destruct H4,H4. right. exists x.+1. simpl.  split;eauto. 
+  rewrite -nth_zip //=. apply/mem_nth. rewrite size_zip minnE H.
+  have :  size gs' - (size gs' - size gs') = size gs' by lia. by move=>->.
 - intros. destruct (H _ H0). auto. auto. destruct H1,H1. right. exists x. auto.
 Qed.
 
@@ -709,16 +294,6 @@ destruct l0. done. rewrite cat_cons in Heql. inversion Heql. subst.
 apply : TRBranch;  eauto. constructor. eauto.  
 Qed.
 
-(*Lemma Tr_app : forall (G : gType) l0 l1, gt_pred 0 0 G -> Tr (l0++l1) G -> Tr l0 G.
-Proof.
-intros.  remember (l0 ++ l1). elim : H0 H l0 l1 Heql ;intros.  destruct l0;done. 
-
-destruct l0. done. rewrite cat_cons in Heql. inversion Heql. subst. eauto.  
-destruct l0. done. rewrite cat_cons in Heql. inversion Heql. subst.
-apply : TRBranch;  eauto. apply : H1. simpl in H2. destruct (andP H2).   apply/andP.  split.
-apply (allP H1).  apply mem_nth.  done. apply (allP H3). apply mem_nth. done.
-eauto. constructor. simpl in H. apply : H0. apply : subst_mixin. done. done. eauto.
-Qed.*)
 
 Lemma take_cat2
      : forall (n0 : nat) (T : Type) (s1 s2 : seq T),

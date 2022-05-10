@@ -2,7 +2,6 @@
 
 From mathcomp Require Import all_ssreflect.
 From Equations Require Import Equations.
-From mathcomp Require Import fintype.
 From deriving Require Import deriving. Locate In.
 
 Set Implicit Arguments.
