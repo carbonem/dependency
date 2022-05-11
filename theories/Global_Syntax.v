@@ -237,6 +237,10 @@ Definition true_pred A := fun (_ : A) => nat.
 Definition gType_rect_true := (@gType_rect Pg  (@true_pred value) (@true_pred endpoint) (@true_pred mysort) (fun gl => forall g, In g gl ->Pg g)
                                                 (@true_pred (seq endpoint))
                                                 (@true_pred (seq mysort))).
+Check endpoint_rect.
+Definition endpoint_rect_true := (@endpoint_rect (@true_pred gType) (@true_pred value) Pe (@true_pred mysort) (@true_pred (seq gType))
+                                                (fun el => forall e, In e el -> Pe e)
+                                                (@true_pred (seq mysort))).
 End SpecializeElimination.
 
 
@@ -500,6 +504,25 @@ rewrite /=. done. rewrite /=.
 intros. case : H6. move=><-. auto. auto. 
 Qed.
 
+Lemma endpoint_ind
+     : forall (Pe : endpoint -> Prop),
+       (forall n : nat, Pe (EVar n)) ->
+       Pe EEnd ->
+       (forall e : endpoint, Pe e -> Pe (ERec e)) ->
+       (forall d c (v : value),
+        forall e : endpoint,
+        Pe e  -> Pe (EMsg d c v e)) ->
+       (forall d c (l : seq endpoint),
+         (forall g, g \in l -> Pe g) -> Pe (EBranch d c l)) ->
+       forall g : endpoint, Pe g.
+Proof.
+intros. apply : endpoint_rect_true;auto.
+all: try (rewrite /true_pred; constructor). 
+intros.  apply H3. intros. apply H4. by apply/inP. 
+rewrite /=. done. rewrite /=. 
+intros. case : H6. move=><-. auto. auto. 
+Qed.
+
 Section Operations.
 Implicit Type g : gType.
 Fixpoint bound_i (i : nat) g  := 
@@ -599,7 +622,7 @@ Notation gt_pred := (fun n0 n1 g => bound_i n0 g && contractive_i n1 g).
 
 (*
 attempt to simplify equality.axiom proof 
-
+b
 
 Definition eqb_i_eq {A} (r : A -> A -> bool) :=  forall g0 g1, r g0 g1 -> g0 = g1.
 
