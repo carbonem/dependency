@@ -16,9 +16,9 @@ Ltac case_if := match goal with
 
                 end; try (move=>->).
 
-Ltac iflia := case_if;try lia.
+(*Ltac iflia := case_if;*)
 
-Ltac rifliad := repeat (iflia; try done).
+Ltac rifliad := (repeat case_if); try done.
 
 
 Definition label := (action * (value + nat))%type.
@@ -183,15 +183,15 @@ Proof. move => A. elim;intros; destruct n; rewrite /delete /=;try done. Qed.
 
 Lemma size_delete : forall (A : Type) (l : seq A) n, size (delete l n) = if n < size l then (size l).-1 else size l.
 Proof. move => A. elim;intros. rewrite delete_nil /=. destruct n;done. 
-rewrite delete_cons /=. destruct n eqn:Heqn. by iflia. 
-subst. rewrite /= H. rifliad.  
+rewrite delete_cons /=. destruct n eqn:Heqn. by rifliad. 
+subst. rewrite /= H. rifliad.  lia.
 Qed.
 
 Lemma delete_insert : forall (A : Type) aa n (x : A), (delete (insert aa n x) n) = if n <= size aa then aa else insert aa n x.
 Proof. move => A. elim. intros. rewrite /=. destruct n. by  rewrite insert_nil delete_cons /=. 
-rewrite insert_nil delete_cons delete_nil. by iflia.  
+rewrite insert_nil delete_cons delete_nil. by rifliad.  
 intros. rewrite insert_cons. destruct n;rewrite /= delete_cons. done. rewrite H.
-iflia. by iflia. by iflia. 
+rifliad. 
 Qed.
 
 Lemma mask_delete : forall (A: Type) d n (aa : seq A) m, nth d m n = false -> mask m aa = mask (delete m n) (delete aa n).
@@ -299,13 +299,13 @@ Lemma take_cat2
      : forall (n0 : nat) (T : Type) (s1 s2 : seq T),
        take n0 (s1 ++ s2) = (if n0 <= size s1 then take n0 s1 else s1 ++ take (n0 - size s1) s2).
 Proof.
-intros. rewrite take_cat. iflia. iflia. done. iflia. have : n0 = size s1 by lia. move=>->. have : size s1 - size s1 = 0 by lia.  move=>->. rewrite take0 cats0. by  rewrite take_size. done.
+intros. rewrite take_cat. rifliad. rifliad. lia.   have : n0 = size s1 by lia. move=>->. have : size s1 - size s1 = 0 by lia.  move=>->. rewrite take0 cats0. by  rewrite take_size. 
 Qed.
 
 Lemma drop_cat2 
      : forall (n0 : nat) (T : Type) (s1 s2 : seq T),
        drop n0 (s1 ++ s2) = (if n0 <= size s1 then drop n0 s1 ++ s2 else drop (n0 - size s1) s2).
-Proof. intros. rewrite drop_cat. iflia. iflia. done. iflia.  have : n0 = size s1 by lia. move=>->. have : size s1 - size s1 = 0 by lia. move=>->. rewrite drop0. rewrite drop_oversize //=. done. 
+Proof. intros. rewrite drop_cat. rifliad. rifliad. lia.  have : n0 = size s1 by lia. move=>->. have : size s1 - size s1 = 0 by lia. move=>->. rewrite drop0. rewrite drop_oversize //=. 
 Qed.
 
 
@@ -378,8 +378,8 @@ Lemma InDep_insert : forall a0 aa a1 n x,  n <= size aa -> Forall (fun a : actio
 Proof. 
 intros. destruct H2,H2,H3,H4. have : n < size x0.  rewrite size_insert in H2. rewrite H2. lia. 
 move=> H4. destruct (nth false x0 n == false) eqn:Heqn. 
-- move : (eqP Heqn)=>HH. move : H3. rewrite (@mask_delete _ false n (insert aa n x)) //=. rewrite !delete_insert.  iflia. 
- intros. exists (delete x0 n). rewrite size_delete.  iflia. rewrite H2 size_insert /=. auto. 
+- move : (eqP Heqn)=>HH. move : H3. rewrite (@mask_delete _ false n (insert aa n x)) //=. rewrite !delete_insert.  rifliad. 
+ intros. exists (delete x0 n). rewrite size_delete.  rifliad. rewrite H2 size_insert /=. auto. 
 - have : nth false x0 n = true by lia. clear Heqn. move => Heqn. 
   destruct (@insert_spec _ aa n x H).  destruct H5,H5,H6. move : H3. rewrite H6 split_mask; last (rewrite size_cat /= H2 size_insert -H5 size_cat; lia).
   rewrite H7 Heqn /=. 
@@ -390,10 +390,11 @@ move=> H4. destruct (nth false x0 n == false) eqn:Heqn.
 
    rewrite cat_path /=. move/andP=>[] _. rewrite andbC /=.  destruct (mask (take n x0) x1) eqn:Heqn4. 
  * rewrite /=. move/IO_II_in_action. move => HH.  rewrite HH in H1. done. 
- * rewrite /=. intros. have : In (last a l) (take n aa).  rewrite -H5 take_cat. iflia.  apply/In_in. rewrite mem_cat. 
+ * rewrite /=. intros. have : (last a l) \in (take n aa).  rewrite -H5 take_cat. rifliad.  lia. 
+   rewrite mem_cat. 
    apply/orP. left. eapply mem_mask with (m:= (take n x0)).  rewrite Heqn4.  by rewrite mem_last.  
 
-   move : H0. rewrite List.Forall_forall.  intros.  apply H0 in x3. apply IO_II_in_action in b. rewrite b in x3. done. 
+   move : H0. rewrite List.Forall_forall.  intros.  apply In_in in x3. apply H0 in x3. apply IO_II_in_action in b. rewrite b in x3. done. 
 Qed.
 
 Lemma ind_aux : forall l a a0, path IO a (belast a0 l) -> II (last a (belast a0 l)) (last a0 l) -> IO_II a a0 && path IO_II a0 l.
@@ -506,7 +507,7 @@ split.
 - destruct Hlin. destruct H4,H4,H5,H6. have : n0 < size x0.  rewrite size_insert in H4. rewrite H4. lia. 
   
   move=> HH4. destruct (nth false x0 n0 == false) eqn:Heqn4. 
-- move : (eqP Heqn4)=>HH. move : H5. rewrite (@mask_delete _ false n0 (insert aa n0 l.1)) //=. rewrite delete_insert. iflia.  intros. exists (delete x0 n0). rewrite size_delete.  iflia. rewrite H4 size_insert /=. split;auto.  
+- move : (eqP Heqn4)=>HH. move : H5. rewrite (@mask_delete _ false n0 (insert aa n0 l.1)) //=. rewrite delete_insert. rifliad.  intros. exists (delete x0 n0). rewrite size_delete.  rifliad. rewrite H4 size_insert /=. split;auto.  
 
 - have : nth false x0 n0 = true by lia. clear Heqn. move => Heqn. 
   destruct (@insert_spec _ aa n0 l.1 x).  destruct H6,H6,H7.  move : H5. rewrite H7 split_mask; last  (rewrite size_cat /= H8 H4 size_insert -H6 size_cat;  lia).
@@ -521,7 +522,7 @@ rewrite /IO_OO in b. case : (orP b).
 
  *  intros.  exfalso. move : a.  rewrite inE. move/orP=>[]. 
   ** move/eqP=>HHeq. inversion HH1. apply : negP. apply H10. apply/IO_in_action. rewrite -HHeq. done. 
-  **  rewrite -H6 in HH2. move : HH2. rewrite take_cat. iflia.
+  **  rewrite -H6 in HH2. move : HH2. rewrite take_cat. rifliad. lia.
       move/List.Forall_app=>[]. move/List.Forall_forall=> Hf _. intros.  apply/negP. apply : Hf. apply/In_in. apply : b0. apply/IO_in_action. done. 
  *  rewrite /OO. move/andP=> [] /eqP _ HHH0. 
      move : (in_split a)=> [] l1 [] l2 Heq0.
@@ -534,11 +535,11 @@ rewrite /IO_OO in b. case : (orP b).
    destruct H5,H5,H10,H11. apply InDep_iff in H10. move : H10.
      case : (split_list (mask x3 l2)). move=>->. rewrite /=.  move/II_in_action=>HII.   exfalso. move : a. rewrite inE.  move/orP=>[].
   **  move/eqP=> HHeq'. inversion HH1. apply : negP. apply H12. rewrite -HHeq'. done. 
-  ** intros. rewrite -H6 in HH2. move : HH2. rewrite take_cat. iflia.
+  ** intros. rewrite -H6 in HH2. move : HH2. rewrite take_cat. rifliad. lia.
       move/List.Forall_app=>[]. move/List.Forall_forall=> Hf _. intros.  apply/negP. apply : Hf. apply/In_in. apply : b0. done. 
  * move=> [] l' [] a2 HHeq'. rewrite HHeq'.
      rewrite  -!catA -cat_cons. move/indep1. rewrite /= andbC /=. move/IO_II_in_action=> Hia.  exfalso. 
-     move : HH2. rewrite -H6. rewrite take_cat. iflia. 
+     move : HH2. rewrite -H6. rewrite take_cat. rifliad. lia.
       move/List.Forall_app=>[]. move/List.Forall_forall=> Hf _. apply : negP. apply : Hf. apply/In_in. 2: { apply : Hia. } 
     
        destruct l1.  simpl in Heq0.  inversion Heq0.  eapply mem_mask with (m:= x3). rewrite HHeq'. by rewrite mem_cat inE eqxx orbC. simpl in Heq0. 

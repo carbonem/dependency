@@ -55,8 +55,7 @@ Check max.
 Lemma subst_none : forall (g g': gType) i j, i <= j -> (bound_i i g) -> (substitution j g g') = g.   
 Proof.
 elim; intros;rewrite /=;try done.
--  iflia.  simpl in H0.  lia.
-- done.
+-  rifliad.  simpl in H0.  lia.
 - f_equal. apply : H. have : i.+1 <= j.+1 by lia. intros. apply : x. done.
 - rewrite (H g' i j) //=.
 - f_equal. elim : l H H1. done.
@@ -68,7 +67,7 @@ Qed.
 Lemma bound_subst : forall (g g': gType) i j, bound_i i.+1 g -> bound_i j g' -> bound_i (i + j) (substitution i g g').
 Proof.
 elim.
--  rewrite /=. intros. iflia. move : H0. rewrite -(eqP H1). intros. apply : bound_le. 2: { apply : H0. }  lia. 
+-  rewrite /=. intros. rifliad. move : H0. rewrite -(eqP H1). intros. apply : bound_le. 2: { apply : H0. }  lia. 
   have : n < i by lia. intros. rewrite /bound_i. lia.
 - rewrite /=. done. 
 - rewrite /=. intros. have : (i + j).+1 = (i.+1 + j) by lia. move=>->. apply H. done. done.
@@ -80,7 +79,7 @@ Qed.
 Lemma bound_subst2 : forall (g g': gType) i j, j <= i -> bound_i i.+1 g -> bound_i j g' -> bound_i i (substitution i g g').
 Proof.
 elim.
--  rewrite /=. intros. iflia. apply : bound_le. 2 : { eauto. } lia. simpl. lia. 
+-  rewrite /=. intros. rifliad. apply : bound_le. 2 : { eauto. } lia. simpl. lia. 
 - done. 
 - intros. simpl. apply : H. 3: {  eauto. } lia. done. 
 - rewrite /=. intros. auto. 
