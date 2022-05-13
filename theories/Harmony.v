@@ -1,7 +1,9 @@
+From SMTCoq Require Import SMTCoq.
 
 From mathcomp Require Import all_ssreflect zify.
 From Equations Require Import Equations.
 From mathcomp Require Import finmap.
+
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -223,10 +225,10 @@ destruct ( P0 (GBranch a l));rewrite /=; try done. destruct ( P1 (GBranch a l));
 rewrite -all_predI. apply/eq_in_all. move=> x Hin. simpl. eauto. lia. 
 Qed.
 
-Lemma traverse_pred_pred : forall g P, traverse_pred P g -> P g.
+(*Lemma traverse_pred_pred : forall g P, traverse_pred P g -> P g.
 Proof. elim;rewrite /=;try done;lia. Qed.
 
-Hint Resolve traverse_pred_pred.
+Hint Resolve traverse_pred_pred.*)
 End Pred.
 
 Notation props := (predI (predI action_pred size_pred) project_pred).
@@ -280,13 +282,19 @@ Definition SGBranch  a (gs : seq subgType) := SubgType (SGBranch_mixin a (seq_su
 
 End SubgType.
 
-Lemma rec_predP : forall g, traverse_pred rec_pred (GRec g) -> traverse_pred rec_pred g.
+Ltac split_and := intros;repeat (match goal with 
+                   | [ H : is_true (_ && _) |- _ ] => destruct (andP H);clear H
+                  end);auto.
+
+(*Lemma rec_predP : forall g, traverse_pred rec_pred (GRec g) -> traverse_pred rec_pred g.
 Proof. move=> g. simpl.  rewrite /rec_pred /=. done. Qed. 
 
-Hint Resolve rec_predP.
+Hint Resolve rec_predP.*)
 
 Definition locked_pred := locked traverse_pred.
 Check locked_pred.
+
+Class CHint (b : bool) := { hint : (b : Prop) }.
 
 Class SubPreds (P0 P1 : pred gType) := { is_sub : subpred P0 P1 } .
 
@@ -298,6 +306,10 @@ Instance SubPred_same P : SubPreds P P.
 constructor. move=> x. done. 
 Defined. 
 
+Instance SubPred_project_pred : SubPreds rec_pred project_pred.  
+constructor. move=> x. rewrite /rec_pred /=. lia.
+Defined. 
+
 (*Instance SubPred_tran P0 P1 P2 (H : SubPreds P0 P1) (H2 : SubPreds P1 P2) : SubPreds P0 P2.
 destruct H,H2. constructor. move=> k H. rewrite is_sub1 //=.  rewrite is_sub0 //=. Defined.*)
 
@@ -305,7 +317,25 @@ Instance locked_pred_P : SubPreds (locked_pred rec_pred) rec_pred.
 constructor. move=>x. unlock locked_pred. elim : x;rewrite /=;auto;intros. apply (andP H0). apply (andP H0). 
 Defined.
 
+Lemma traverse_P : forall g P, traverse_pred P g -> P g. elim;rewrite /=;try done;intros. apply (andP H). apply (andP H). apply (andP H0).
+apply (andP H0). apply (andP H0). Defined.
+
+Instance SubPreds_lr_sp : SubPreds (locked_pred rec_pred) size_pred.  
+constructor. move=>x. unlock locked_pred. rewrite !traverse_split. intros. split_and. apply traverse_P. done. 
+Defined.
+
+Instance SubPreds_lPP P : SubPreds (locked_pred P) P.  
+constructor. move=>x. unlock locked_pred. apply traverse_P. Defined. 
+
+
+Instance SubPreds_lr_pp : SubPreds (locked_pred rec_pred) project_pred.  
+constructor. move=>x. unlock locked_pred. rewrite !traverse_split. intros. split_and. apply traverse_P. done. 
+Defined.
+
 Class Syntactic g0 g1 (P : pred gType) := { syn_imp  : P g0 -> P g1}.
+
+Instance SyntacticSame  g P : Syntactic g g (locked_pred P).
+constructor.  unlock locked_pred. done.   Defined.
 
 Instance SyntacticMsg  a u g P : Syntactic (GMsg a u g) g (locked_pred P).
 constructor.  unlock locked_pred. simpl. lia. Defined.
@@ -313,50 +343,89 @@ constructor.  unlock locked_pred. simpl. lia. Defined.
 Instance SyntacticRec  g P : Syntactic (GRec g) g (locked_pred P).
 constructor.  unlock locked_pred. simpl. lia. Defined.
 
-Lemma use_classes : forall (P0 P1 : pred gType) g0 g1,  P0 g0 -> Syntactic g0 g1 P0 ->  SubPreds P0 P1 -> P1 g1.
+Instance SyntacticBranch  x a gs P : CHint (x \in gs) -> Syntactic (GBranch a gs) x (locked_pred P).
+intros. constructor.  unlock locked_pred. simpl. intros. destruct (andP H0). apply (allP H2). destruct H. done. Defined.
+Hint Resolve SyntacticBranch. 
+
+Instance SyntacticBranch0  a gs : Syntactic (GBranch a gs) (nth GEnd gs 0) (locked_pred rec_pred).
+constructor.  unlock locked_pred. simpl. intros. destruct (andP H). apply (allP H1). apply/mem_nth. move : H0. rewrite /rec_pred /=. intros. split_and. Defined. 
+
+Class GoalType (b0 b1 : bool) := { goalType_proof : b0 -> b1 }.
+
+Instance goalType0 a gs : GoalType (size_pred (GBranch a gs)) (0 < size gs).
+Proof. constructor. done. Defined.
+
+Instance goalType_refl b : GoalType b b.
+Proof. constructor. done. Defined.
+
+Instance goalType_nth0 a gs d : GoalType (size_pred (GBranch a gs)) (nth d gs 0 \in gs).
+Proof. constructor. simpl. intros. apply/mem_nth. done. Defined.
+
+Lemma use_classes : forall (P0 P1 : pred gType) g0 g1 b,  P0 g0 -> Syntactic g0 g1 P0 ->  SubPreds P0 P1 -> GoalType (P1 g1) b -> b.
 Proof.
-intros. destruct H1. rewrite is_sub0 //=. destruct H0. auto. Defined. 
+intros. destruct H1. destruct H2. apply goalType_proof0.  rewrite is_sub0 //=. destruct H0. apply syn_imp0. done. 
+Defined. 
 
-Ltac finsupp := typeclasses eauto with typeclass_instances.
+Lemma use_classes2 : forall (P0 P1 : pred gType) g0 g1 b, GoalType (P1 g1) b ->  SubPreds P0 P1 -> Syntactic g0 g1 P0 ->  P0 g0 -> b.
+Proof.
+intros. destruct H,H0,H1. apply goalType_proof0.  rewrite is_sub0 //=.  apply syn_imp0. done. 
+Defined. 
 
-Ltac by_asm := match goal with 
-                   | [ H : is_true (locked_pred _ _) |- _ ] => solve [apply : (use_classes H)]
-                  end.
+
+(*Lemma branch_size : forall a gs, size_pred (GBranch a gs) = (0 < size gs).
+Proof. done. Qed.*)
+
+
+Ltac brute :=  typeclasses eauto with typeclass_instances.
+Ltac by_asm H := solve [apply : (use_classes H)].
+Ltac by_asm_debug H :=  apply : (use_classes H).
+Ltac by_asm2 H := solve [apply : (use_classes2 H)].
+Ltac by_asm_debug2 H :=  apply : (use_classes2 H).
+
+
+
+(*Ltac prepare_goal := match goal with
+                   | [  |- is_true (nth _ _ _ \in _)  ] => apply/mem_nth; erewrite <- branch_size
+                    end.*)
+
+
+Ltac catch_contra := repeat (match goal with 
+                   | [ H : is_true (?a != ?a_) |- _ ] => rewrite eqxx in H;done 
+
+                  end).
+Ltac norm_eqs := repeat (match goal with 
+                   | [ H : (_ == _) |- _ ] => move : H => /eqP=>H
+                   | [ H : (_ == _) = true |- _ ] => move : H => /eqP=>H
+                   | [ H : (_ == _) = false |- _ ] => move : H => /negbT=>H
+
+                  end);subst;catch_contra.
+
+Lemma notin_big : forall p gs i, p \notin \bigcup_(j <- gs) (ptcps_of_g j) -> i < size gs -> p \notin ptcps_of_g (nth GEnd gs i).
+Proof.
+intros. apply/negP=>HH. apply (negP H). apply/bigfcupP. exists (nth GEnd gs i). rewrite mem_nth //=. apply HH. Qed.
+
+Hint Resolve notin_big.
 
 Lemma project_tw0 : forall (g : subgType (locked_pred rec_pred)) p0 p1, p0 \notin (ptcps_of_g g) ->  p1 \notin (ptcps_of_g g)  -> project g p0 = project g p1.  
 Proof.
 case. elim; rewrite /=;intros;try done. erewrite H;eauto. by  rewrite (negbTE H0) (negbTE H1).
-by_asm. Print rifliad.
-rifliad.  f_equal.  apply : H. eauto. apply and_left in i. 
-move : H0. rewrite !inE. by move/andP=>[]. 
-move : H1. rewrite !inE. by move/andP=>[]. done.
+by_asm i. 
 
-move : H0. rewrite !inE H3. lia. 
-move : H0. rewrite !inE H3. lia.
-move : H0. rewrite !inE H4. lia.
-move : H0. rewrite !inE H4. lia.
-move : H0. rewrite !inE H4. lia.
-move : H1. rewrite !inE H5. lia.
-move : H1. rewrite !inE H6. lia.
+rewrite !inE in H0,H1. split_and.
+rifliad. apply : H. by_asm i.
+done.  done.
+rewrite !inE in H0,H1.
+rifliad. rewrite !match_n. split_and. rewrite big_map in H7,H9.   apply : H.
 
-apply : H. 
-move : H0. rewrite !inE. eauto. 
-move : H0. rewrite !inE. eauto. 
-move : H1. rewrite !inE. eauto. 
-move : H1. rewrite !inE. eauto. 
+by_asm i.
 
-move : H0 H1. rewrite !inE. move/andP=>[]. move/andP=>[]. repeat move/negbTE=>->. move=>H0.
-move/andP=>[]. move/andP=>[]. repeat move/negbTE=>->. move : H0.  rewrite !big_map.  rewrite !match_n. 
-intros. apply H. eauto. eauto.  
-move : H0. move/bigfcupP=>HH. apply/negP=>HH0. apply/HH. exists (nth GEnd l 0). rewrite andbC /=. all:  eauto. 
-move : b. move/bigfcupP=>HH'.  apply/negP=>b. apply/HH'. eauto.  
+by_asm i.
+
+have : 0 < size l by by_asm i. by apply notin_big.  
+have : 0 < size l by by_asm i. by apply notin_big. 
 Qed.
 
-
-Print project_pred. Print ptcps_of_g.
-
-
-Lemma traverse_subpred : forall g (p0 p1 : pred gType), subpred p0 p1 -> traverse_pred p0 g -> traverse_pred p1 g.
+(*Lemma traverse_subpred : forall g (p0 p1 : pred gType), subpred p0 p1 -> traverse_pred p0 g -> traverse_pred p1 g.
 Proof. elim;rewrite /=;try done;intros. all : try (rewrite H0 //=; lia). 
 rewrite H //=. eauto. rewrite H //=. lia.  rewrite H0 //=. eauto. lia. rewrite H0 //=. eauto. lia. 
 rewrite H0 //=. apply/allP=>k Hin.  apply : H;eauto.  lia. 
@@ -368,60 +437,55 @@ Proof. move=>k. rewrite /rec_pred /=. lia. Qed.
 Lemma rec_pred_size : subpred rec_pred size_pred. 
 Proof. move=>k. rewrite /rec_pred /=. lia. Qed.
 
-Hint Resolve traverse_subpred rec_pred_project rec_pred_size.
+Hint Resolve traverse_subpred rec_pred_project rec_pred_size.*)
 
 Lemma to_structure : forall (P : pred gType) g (H : P g), g = SubgType H.
 Proof. by rewrite /=. Qed.
 
 
 
-Lemma project_predP_aux : forall a gs p i (Hp : traverse_pred rec_pred (GBranch a gs)) 
-                                     (H0 : traverse_pred rec_pred (nth GEnd gs 0))
-                                     (Hi : traverse_pred rec_pred (nth GEnd gs i)), 
+
+Lemma project_predP_aux : forall a gs p i (Hp : locked_pred rec_pred (GBranch a gs)) 
+                                     (H0 : locked_pred rec_pred (nth GEnd gs 0))
+                                     (Hi : locked_pred rec_pred (nth GEnd gs i)), 
 p \notin a -> i < size gs  -> (project (SubgType H0) p) = project (SubgType Hi) p.
 Proof. 
-intros. have : project_pred (GBranch a gs) by eauto. rewrite /= /all_eq_F. move/allP=>Hall. have : (nth GEnd gs i) \in gs. apply/mem_nth. auto.  move/Hall/eqP/fmapP=>HH0. specialize HH0 with p. move :HH0.  rewrite !mapf_if. rifliad.  case. move=><-. done. move=> _. 
+intros. have : project_pred (GBranch a gs) by  by_asm Hp. rewrite /= /all_eq_F. move/allP=>Hall. have : (nth GEnd gs i) \in gs by eauto.
+move/Hall/eqP/fmapP=>HH0. specialize HH0 with p. move :HH0.  rewrite !mapf_if. rifliad.  case. move=><-. done. move=> _. 
 move : H2. move/negbT. rewrite inE negb_or. move/andP=>[].  rewrite inE big_map. intros. move : a0.  rewrite /fresh. destruct (atom_fresh_for_list (a `|` \bigcup_(j <- gs) j)) eqn:Heqn.  rewrite Heqn. 
 
 
-have : (nth GEnd gs i) \in gs. apply/mem_nth. auto.  move/Hall/eqP/fmapP=>HH0. specialize HH0 with x. move :HH0.  rewrite !mapf_if. rifliad.
+have : (nth GEnd gs i) \in gs by eauto. move/Hall/eqP/fmapP=>HH0. specialize HH0 with x. move :HH0.  rewrite !mapf_if. rifliad.
 case. intros.
 
 have : p \notin ( \bigcup_(j <- gs) j). move : b H. rewrite !inE. move/orP=>[]. 
-move/orP=>[]. move/eqP=>->. rewrite eqxx. done. move/eqP=>->. rewrite eqxx.  lia. by move/andP=>[] -> ->. 
-move => HH0. 
+move/orP=>[]. move/eqP=>->. rewrite eqxx. done. move/eqP=>->. rewrite eqxx. split_and.  by move/andP=>[] -> ->. 
+move => HH0.
 
+clear Heqn. move : n.  move/negP. rewrite !inE. split_and. 
 rewrite (to_structure H0) (to_structure Hi). erewrite (@project_tw0 (SubgType H0)). erewrite (@project_tw0 (SubgType Hi)). 
 apply : H3.
-simpl. apply/negP=>HH. apply (negP HH0). apply/bigfcupP. exists (nth GEnd gs i). rewrite mem_nth //=. apply HH.
-
-simpl. apply/negP=>HH. clear Heqn. apply : n. rewrite !inE. apply/orP. right. apply/bigfcupP. exists (nth GEnd gs i). 
-rewrite mem_nth //=. apply HH. simpl in H0. simpl. eauto. 
-(*destruct (andP H0). apply (allP H5). rewrite mem_nth //=.*)
-
-apply/negP=>HH. apply (negP HH0). apply/bigfcupP. exists (nth GEnd gs 0). rewrite mem_nth //=. lia. apply HH.
-
-apply/negP=>HH. clear Heqn. apply : n. rewrite !inE. apply/orP. right. apply/bigfcupP. exists (nth GEnd gs 0). 
-rewrite mem_nth //=. simpl in H0. lia. done. eauto. (*simpl in H0. destruct (andP H0). apply (allP H5). rewrite mem_nth //=. *)
+simpl. eauto. simpl. eauto. simpl.
+have : 0 < size gs by by_asm Hp. eauto. simpl. have : 0 < size gs by by_asm Hp. eauto.
 move : H2. by rewrite big_map !inE  /fresh Heqn eqxx/=. 
 Qed.
 
-Lemma traverse_nth : forall a gs i P, traverse_pred P (GBranch a gs) -> i < size gs -> traverse_pred P (nth GEnd gs i).
+(*Lemma traverse_nth : forall a gs i P, traverse_pred P (GBranch a gs) -> i < size gs -> traverse_pred P (nth GEnd gs i).
 Proof. intros. simpl in H. eauto.  Qed.
 
 Lemma traverse_nth0 : forall a gs P, subpred P size_pred  -> traverse_pred P (GBranch a gs) -> traverse_pred P (nth GEnd gs 0).
 Proof.
 intros. simpl in H0. destruct (andP H0). apply H in H1. simpl in H1. eauto. Qed.
 
-Hint Resolve traverse_nth traverse_nth0.
+Hint Resolve traverse_nth traverse_nth0.*)
 
 
-Lemma project_predP : forall a gs p i j (Hp : traverse_pred rec_pred (GBranch a gs))
-                                   (Hi : traverse_pred rec_pred (nth GEnd gs i))
-                                   (Hj : traverse_pred rec_pred (nth GEnd gs j)),
+Lemma project_predP : forall a gs p i j (Hp : locked_pred rec_pred (GBranch a gs))
+                                   (Hi : locked_pred rec_pred (nth GEnd gs i))
+                                   (Hj : locked_pred rec_pred (nth GEnd gs j)),
  p \notin a -> i < size gs -> j < size gs -> (project (SubgType Hi) p) = project (SubgType Hj) p.
 Proof. intros. erewrite <- project_predP_aux;eauto.   apply : project_predP_aux;eauto. 
-Grab Existential Variables. eauto.
+Grab Existential Variables. by_asm Hp.  
 Qed.
 
 Lemma is_leafP : forall e, is_leaf e -> e = EEnd \/ exists n, e = EVar n. 
@@ -534,12 +598,7 @@ Proof.
 intros. edestruct (project_end); eauto. destruct H2. eapply bound_project in H;eauto. erewrite H2 in H. done. Qed.
 
 *)
-Ltac norm_eqs := repeat (match goal with 
-                   | [ H : (_ == _) |- _ ] => move : H => /eqP=>H
-                   | [ H : (_ == _) = true |- _ ] => move : H => /eqP=>H
-                   | [ H : (_ == _) = false |- _ ] => move : H => /negbT=>H
 
-                  end);subst.
 
 (*Ltac ssubst := (repeat apply_eqs);subst.*)
 
@@ -553,7 +612,6 @@ Definition projectable2 := forall g, props S g -> forall p, p \in S -> exists e,
 
 Definition projectable3 := forall g, props g -> forall p, exists e, proj g p e.
 *)
-Definition ggType := subgType (traverse_pred rec_pred).
 
 Lemma nat_fact : forall n, n - (n - n) = n. lia. Qed.
 
@@ -571,42 +629,39 @@ apply/Forall_forall. intros. move : H0 => /nthP H3.  specialize H3 with a. destr
 Qed.
 
 
-Lemma testMsg : forall a u g0, traverse_pred rec_pred (GMsg a u g0) -> traverse_pred rec_pred g0.
-Proof. eauto. Qed.
+
+Hint Resolve Build_CHint.
+
+Ltac hint b := let H := fresh "H" in  (have : b by eauto); move=> /Build_CHint H. 
 
 
-(*Check (g : subgType (traverse_pred rec_pred)). *)
-Lemma projP : forall (g : ggType) p, proj g p (project g p).
+Lemma projP : forall (g : subgType (locked_pred rec_pred)) p, proj g p (project g p).
 Proof. 
-case. elim;intros;rewrite /=;try done. rifliad. apply : cp_rec0. done. eapply H. 
-apply : cp_rec1. by apply/negbT. apply : H.  simpl in i. Print traverse_pred. 
+case. elim;intros;rewrite /=;try done. rifliad. apply : cp_rec0. done. apply : H. by_asm i.
+apply : cp_rec1. by apply/negbT. apply : H.  by_asm i. 
 
-
-eauto. 
 rifliad;eauto. 
-norm_eqs. subst.
-apply cp_msg_from;eauto. apply : H. eauto.
-norm_eqs.  subst. apply cp_msg_to;eauto.  apply : H. eauto.
-norm_eqs.  subst. apply cp_msg_other. by  rewrite !inE H1 H0. apply : H. eauto.
+norm_eqs. 
+apply cp_msg_from;eauto. apply : H. by_asm i.
+norm_eqs.  apply cp_msg_to;eauto.  apply : H. by_asm i.
+norm_eqs.  apply cp_msg_other. by  rewrite !inE H1 H0. apply : H. by_asm i.
 rifliad. 
-norm_eqs. subst. apply cp_branch_from. rewrite size_map //=.
+norm_eqs. apply cp_branch_from. rewrite size_map //=.
 apply/forallzipP. by rewrite size_map.
 intros. rewrite /=. 
-erewrite nth_project. apply : H. eauto. eauto.
-
+erewrite nth_project. apply : H. eauto. hint (nth GEnd l x0 \in l). by_asm i.  
 norm_eqs. apply cp_branch_to. rewrite size_map //=.
 apply/forallzipP. by rewrite size_map.
 intros. rewrite /=. 
-erewrite nth_project. apply : H. eauto. eauto.
-
+erewrite nth_project. apply : H. eauto. hint (nth GEnd l x0 \in l).   by_asm i. 
 rewrite match_n  /=. apply cp_branch_other. rewrite !inE. norm_eqs. by  rewrite H1 H0. 
 
 apply/forallP. intros. 
 have : project (nth GEnd l 0) p = project (nth GEnd l x0) p.
 
-simpl in H. apply : project_predP_aux; eauto. rewrite !inE. norm_eqs. by rewrite H1 H0. 
-move=>->. apply : H;eauto.
-Grab Existential Variables. eauto.
+simpl in H. apply : project_predP_aux.  by_asm i. by_asm i.  hint (nth GEnd l x0 \in l).  by_asm i.  
+rewrite !inE. norm_eqs. by rewrite H1 H0. 
+done. move=>->. apply : H. eauto. hint (nth GEnd l x0 \in l). by_asm i.
 Qed.
 
 
@@ -701,7 +756,7 @@ Lemma rem2_map : forall (d : env) p1 p2 e1 e2, d.[p1 <- e1].[p2 <- e2] = d.[\  p
 Proof.
 intros. rewrite !setf_rem /=.
 have : (p2 |` (p1 |` domf d)) `\` ([fset p1; p1] `\ p1 `\ p2) = (p2 |` (p1 |` domf d)).
-apply/eqP. apply/fset_eqP. Locate "=i". Print eq_mem.  intro x. rewrite !inE /=  -!eqbF_neg. 
+apply/eqP. apply/fset_eqP.  intro x. rewrite !inE /=  -!eqbF_neg. 
 destruct (x == p2) eqn:Heqn. by rewrite /=. rewrite /=. destruct (x == p1). by rewrite /=. rewrite /=. done.
 move=>->. have : p2 |` (p1 |` domf d) = domf ((d.[p1 <- e1]).[p2 <- e2]).  apply/eqP/fset_eqP. move => x. by rewrite /=.  
 move => ->. by rewrite restrictfT. 
@@ -722,7 +777,7 @@ inversion H. subst. rewrite /=.  done.
 Qed.
 
 
-Coercion action_to_ch (a : action) : ch := let: Action _ _ c := a in c.
+(*Coercion action_to_ch (a : action) : ch := let: Action _ _ c := a in c.
 
 Lemma traverse_top_msg : forall a u g P, (traverse_pred P) (GMsg a u g) -> P (GMsg a u g). 
 Proof. rewrite /=. intros. eauto. Qed.
@@ -733,40 +788,48 @@ Proof. rewrite /=;intros;eauto. Qed.
 Lemma size_pred_msg : forall a u g, (traverse_pred action_pred) (GMsg a u g) -> ptcp_from a != ptcp_to a.
 Proof.  rewrite /=. eauto. Qed.
 
-Hint Resolve traverse_top_msg traverse_next_msg size_pred_msg.
+Hint Resolve traverse_top_msg traverse_next_msg size_pred_msg.*)
+
+Existing Class subgType.
+Lemma lock_traverse g P: traverse_pred P g <-> locked_pred P g.
+Proof. unlock locked_pred. done. Qed.
+
+Ltac simpl_lock := rewrite -lock_traverse /= lock_traverse. 
 
 
-Lemma traverse_action_pred_unf : forall (g0 g1 : subgType (traverse_pred action_pred )) i, traverse_pred action_pred (substitution i g0 g1).
+
+Instance SubPreds_lock P : SubPreds (locked_pred P) (traverse_pred P).  
+constructor. move=>x. unlock locked_pred. done. 
+Defined.
+
+Ltac split_and_g := repeat (match goal with 
+                   | [ |- is_true (_ && _) ] => apply/andP;split 
+                  end).
+
+Instance goalType_action a u g : GoalType (locked_pred action_pred (GMsg a u g)) (ptcp_from a != ptcp_to a).
+Proof. constructor. unlock locked_pred.  simpl. split_and. Defined.
+
+Instance goalType_branch a gs : GoalType (locked_pred action_pred (GBranch a gs)) (ptcp_from a != ptcp_to a).
+Proof. constructor. unlock locked_pred.  simpl. split_and. Defined.
+
+Lemma traverse_action_pred_unf : forall (g0 g1 : subgType (locked_pred action_pred )) i, traverse_pred action_pred (substitution i g0 g1).
 Proof. 
 case. elim;intros;rewrite /=;try done. 
-- iflia. Set Printing Coercions.  eauto.
-- apply H;auto.
-- simpl in H0. eapply H; eauto. apply/andP. split. eauto. eapply H;eauto.  simpl. eauto. rewrite /gType_of_subgType in H0.   
-
-simpl in H0. destruct (andP H0). rewrite H2 /=. rewrite all_map. apply/allP=>x Hin. rewrite /=. eapply H;eauto.  
-Grab Existential Variables.  all : eauto. Hint hint_definition.
+- rifliad.  destruct g1.  simpl in *. by_asm i1. 
+- apply : H. by_asm i. 
+- split_and_g. by_asm i.  apply : H. by_asm i. 
+- split_and_g. by_asm i. rewrite all_map. apply/allP=> ll Hin /=. apply : H. done. hint (ll \in l). by_asm i.
 Qed.
 
 
-
-Lemma traverse_action_pred_unf : forall g0 g1 i, traverse_pred action_pred g0 -> traverse_pred action_pred g1 -> traverse_pred action_pred (substitution i g0 g1).
+Lemma traverse_size_pred_unf : forall (g0 g1 : subgType (locked_pred size_pred)) i, traverse_pred size_pred (substitution i g0 g1).
 Proof. 
-elim;intros;rewrite /=;try done. 
-- iflia. 
-- apply H;auto.
-- simpl in H0. destruct (andP H0).  rewrite H2 /=. auto. 
-- simpl in H0. destruct (andP H0).  rewrite H2 /=. auto.
-  rewrite all_map. apply/allP=>x Hin. rewrite /=. apply H;auto.  apply (allP H3). done.
-Qed.
-
-
-
-Lemma traverse_size_pred_unf : forall g0 g1 i, traverse_pred size_pred g0 -> traverse_pred size_pred g1 -> traverse_pred size_pred (substitution i g0 g1).
-Proof. 
-elim;intros;rewrite /=; simpl in *;try done;auto.
-- iflia. 
-- apply H;auto.
-- rewrite size_map. destruct (andP H0). rewrite H2 /=. rewrite all_map. apply/allP=> x Hin. rewrite /=. apply : H;eauto.
+case. elim;intros;rewrite /=; simpl in *;try done;auto.
+- rifliad. destruct g1. simpl. by_asm i1.
+- apply H. by_asm i.
+- apply H. by_asm i.
+- split_and_g. rewrite size_map. by_asm_debug i.
+- rewrite all_map. apply/allP=> ll Hin /=. apply : H. done. hint (ll \in l). by_asm i.
 Qed.
 
 
