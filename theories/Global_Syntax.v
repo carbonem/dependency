@@ -535,6 +535,16 @@ match g with
 | GVar n => n < i
 end.
 
+Fixpoint bound_i_e i e := 
+  match e with
+  | EVar n => n < i
+  | EEnd => true
+  | ERec g0 => bound_i_e i.+1 g0
+  | EMsg _ _ _ g0 => bound_i_e i g0
+  | EBranch _ _ gs => all (bound_i_e i) gs
+  end.
+
+
 (*Inspired by Francisco*)
 Fixpoint contractive_i (d : nat) g :=
 match g with 
@@ -556,6 +566,16 @@ match g0 with
 (*| GPar g0' g1' => GPar (substitution i g0' g1) (substitution i g1' g1) *)
 | GEnd => GEnd
 end.
+
+Fixpoint subst_e (i : nat) e0 e1  :=
+match e0 with
+| EMsg d a u e0' => EMsg d a u (subst_e i e0' e1)
+| EBranch d a es => EBranch d a (map (fun e0' => subst_e i e0' e1) es)
+| EVar n => if n == i then e1 else e0
+| ERec e0' => ERec (subst_e (S i) e0' e1) (*Key insight, consume mu during traversal to make it commute with congruence rules*)
+| EEnd => EEnd
+end.
+
 
 Fixpoint mu_height g :=
 match g with
