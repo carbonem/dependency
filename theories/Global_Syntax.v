@@ -76,7 +76,7 @@ Unset Elimination Schemes. Check seq.
 Inductive gType  : Set :=
   | GVar : nat -> gType  
   | GEnd : gType  
-  | GRec : gType -> gType  
+  | GRec : nat -> gType -> gType  
   | GMsg : action -> value -> gType -> gType  
   | GBranch : action -> seq gType -> gType  
  with value  : Set  :=
@@ -91,7 +91,7 @@ Inductive gType  : Set :=
   | EEnd : endpoint  
   | EMsg : dir -> ch -> value -> endpoint -> endpoint  
   | EBranch  : dir -> ch  -> seq endpoint -> endpoint  
-  | ERec : endpoint -> endpoint .
+  | ERec : nat -> endpoint -> endpoint .
 Set Elimination Schemes.
 
 
@@ -120,7 +120,7 @@ Variables (Pg : gType -> Type)
 
 Hypothesis Pg_var : (forall n : nat, Pg (GVar n)).
 Hypothesis Pg_end : Pg GEnd.
-Hypothesis Pg_rec : (forall g : gType, Pg g -> Pg (GRec g)).
+Hypothesis Pg_rec : (forall g : gType, Pg g -> forall n, Pg (GRec n g)).
 Hypothesis Pg_msg : (forall (a : action) (v : value), Pv v -> forall g : gType, Pg g -> Pg (GMsg a v g)).
 Hypothesis Pg_branch : (forall (a : action) (l : seq gType), P_glist l  -> Pg (GBranch a l)).
 
@@ -135,7 +135,7 @@ Hypothesis Pe_var : forall n : nat, Pe (EVar n).
 Hypothesis Pe_end : Pe EEnd.
 Hypothesis Pe_msg : forall (d : dir) (c : ch) (s : value), Pv s -> forall e : endpoint, Pe e -> Pe (EMsg d c s e).
 Hypothesis Pe_branch : forall (d : dir) (c : ch) (l : seq endpoint), P_elist l  -> Pe (EBranch d c l).
-Hypothesis Pe_rec : forall e : endpoint, Pe e -> Pe (ERec e).
+Hypothesis Pe_rec : forall e : endpoint, Pe e -> forall n, Pe (ERec n e).
 
 Hypothesis P_glist_0 : P_glist nil.
 Hypothesis P_glist_cons : forall g, Pg g -> forall l, P_glist l -> P_glist (g::l).
@@ -146,7 +146,7 @@ Hypothesis P_elist_cons : forall e, Pe e -> forall l, P_elist l -> P_elist (e::l
 Hypothesis P_mlist_0 : P_mlist nil.
 Hypothesis P_mlist_cons : forall s, Pm s -> forall l, P_mlist l -> P_mlist (s::l).
 
-(*Maybe used derive mutual induct instead*)
+(*Maybe used derive mutual induct instead*) 
 Fixpoint gType_rect g : Pg g :=
   let fix seq_gType_rect gs : P_glist gs := 
     match gs with 
@@ -156,7 +156,7 @@ Fixpoint gType_rect g : Pg g :=
   match g with 
    | GVar n => Pg_var n
    | GEnd => Pg_end
-   | GRec g => Pg_rec (gType_rect g)
+   | GRec n g => Pg_rec (gType_rect g) n
    | GMsg a u g => Pg_msg a (value_rect u) (gType_rect g)
    | GBranch a l => Pg_branch a (seq_gType_rect l)
    end
@@ -189,7 +189,7 @@ match e with
 | EEnd => Pe_end
 | EMsg d c m e => Pe_msg d c (value_rect m) (endpoint_rect e)
 | EBranch d c es => Pe_branch d c (seq_endpoint_rect es)
-| ERec e => Pe_rec (endpoint_rect e)
+| ERec n e => Pe_rec  (endpoint_rect e) n
 end.
 
 
@@ -255,7 +255,7 @@ let list_eq := fix list_eq s1 s2 {struct s1} :=
 in
 match g0, g1 with
 | GMsg a0 v0 g0', GMsg a0' v0' g1' => (a0 == a0') && value_eqb v0 v0' && (gType_eqb g0' g1') 
-| GRec g0', GRec g1' => gType_eqb g0' g1' 
+| GRec n g0', GRec n1 g1' => (n == n1) && gType_eqb g0' g1' 
 | GEnd, GEnd => true
 | GBranch a gs, GBranch a' gs' => (a == a') && (list_eq  gs gs')
 | GVar n, GVar n' => n == n'
@@ -288,7 +288,7 @@ match e0, e1 with
 | EEnd , EEnd => true
 | EMsg d ch0 s0 e0, EMsg d1 ch1 s1 e1 =>  (d == d1) && (ch0 == ch1) && (value_eqb s0 s1) && (endpoint_eqb e0 e1)
 | EBranch d0 ch0 s0, EBranch d1 ch1 s1 => (d0 == d1) && (ch0 == ch1) && (list_eq s0 s1)
-| ERec e0, ERec e1 => endpoint_eqb e0 e1
+| ERec n0 e0, ERec n1 e1 => (n0 == n1) && endpoint_eqb e0 e1
 | _ , _ => false
 end
 with mysort_eqb (st0 st1 : mysort) {struct st0} :=
@@ -370,7 +370,9 @@ Lemma axioms_eqbs : leib_eq gType_eqb *  (leib_eq mysort_eqb *  (leib_eq value_e
 Proof. unfold leib_eq.  apply : mut_ind. 
 - intro. case_filter. intros. rewrite /=. inj.
 - case_filter.
-- intros g IH. case_filter.  rewrite /=. rewrite IH.  inj. 
+- intros g IH. case_filter.  rewrite /=. destruct b. split;done. split;done.   split. 
+Admitted.
+(*
 - intros. case_filter_on b. rewrite /=. split.  
  * move/andP => [] /andP => [] [] /eqP=>->.  rewrite H H0. by move =>->->. 
  * case. move =>->->->. by rewrite eqxx /= !refl_eqbs. 
@@ -431,7 +433,7 @@ Proof. unfold leib_eq.  apply : mut_ind.
   case. done.
 all : try (rewrite /=; done).
 all : intros;constructor;auto.  
-Defined.
+Defined.*)
 
 
 
@@ -489,7 +491,7 @@ Lemma gType_ind
      : forall (Pg : gType -> Prop),
        (forall n : nat, Pg (GVar n)) ->
        Pg GEnd ->
-       (forall g : gType, Pg g -> Pg (GRec g)) ->
+       (forall g : gType, Pg g -> forall n, Pg (GRec n g)) ->
        (forall (a : action) (v : value),
         forall g : gType,
         Pg g -> Pg (GMsg a v g)) ->
@@ -508,7 +510,7 @@ Lemma endpoint_ind
      : forall (Pe : endpoint -> Prop),
        (forall n : nat, Pe (EVar n)) ->
        Pe EEnd ->
-       (forall e : endpoint, Pe e -> Pe (ERec e)) ->
+       (forall e : endpoint, Pe e -> forall n, Pe (ERec n e)) ->
        (forall d c (v : value),
         forall e : endpoint,
         Pe e  -> Pe (EMsg d c v e)) ->
@@ -525,7 +527,7 @@ Qed.
 
 Section Operations.
 Implicit Type g : gType.
-Fixpoint bound_i (i : nat) g  := 
+(*Fixpoint bound_i (i : nat) g  := 
 match g with 
 | GEnd => true
 | GMsg _ _ g0 => bound_i i g0
@@ -554,7 +556,7 @@ match g with
 (*| GPar g0 g1 => (contractive_i d g0) && (contractive_i d g1)*)
 | GRec g0 => contractive_i (S d) g0
 | GVar n => d <= n
-end. 
+end. *)
 
 
 Fixpoint substitution (i : nat) g0 g1  :=
@@ -562,7 +564,7 @@ match g0 with
 | GMsg a u g0' => GMsg a u (substitution i g0' g1)
 | GBranch a gs => GBranch a (map (fun g0' => substitution i g0' g1) gs)
 | GVar n => if n == i then g1 else g0
-| GRec g0' => GRec (substitution (S i) g0' g1)
+| GRec n g0' => if n == i then g0 else GRec n (substitution i g0' g1)
 (*| GPar g0' g1' => GPar (substitution i g0' g1) (substitution i g1' g1) *)
 | GEnd => GEnd
 end.
@@ -572,12 +574,12 @@ match e0 with
 | EMsg d a u e0' => EMsg d a u (subst_e i e0' e1)
 | EBranch d a es => EBranch d a (map (fun e0' => subst_e i e0' e1) es)
 | EVar n => if n == i then e1 else e0
-| ERec e0' => ERec (subst_e (S i) e0' e1) (*Key insight, consume mu during traversal to make it commute with congruence rules*)
+| ERec n e0' => if n == i then e0 else ERec n (subst_e i e0' e1) (*Key insight, consume mu during traversal to make it commute with congruence rules*)
 | EEnd => EEnd
 end.
 
 
-Fixpoint mu_height g :=
+(*Fixpoint mu_height g :=
 match g with
 | GRec g0 => (mu_height g0).+1
 | _ => 0
@@ -599,7 +601,7 @@ match g with
 | GMsg a u g0 => Some (a,[::g0])
 | GBranch a gs => Some (a,gs)
 | _ => None
-end.
+end.*)
 
 
 (*Notation dec x := (Sumbool.sumbool_of_bool x).
@@ -627,16 +629,29 @@ end.*)
 
 End Operations.
 
-Notation g_next g := (g_next_aux (unf g (mu_height g))).
+Class SubstType  (A : eqType) := { substitute : nat -> A -> A -> A }.
+
+Instance substtype_gType : SubstType gType_EqType := Build_SubstType substitution.   
+
+Instance substtype_endpoint : SubstType endpoint_EqType := Build_SubstType subst_e.   
+
+Notation "G [s G0 // X ]" :=  (substitute X G G0)(at level 0, format "G [s  G0  //  X ]").
+
+Notation "G [g G0 // X ]" :=  (substitution X G G0)(at level 0, format "G [g  G0  //  X ]").
+
+Notation "G [e G0 // X ]" :=  (subst_e X G G0)(at level 0, format "G [e  G0  //  X ]").
+
+
+Opaque substitute.
+(*Notation g_next g := (g_next_aux (unf g (mu_height g))).
 
 
 Notation bound := (bound_i 0).
 Notation contractive := (contractive_i 0).
 
-Notation "G [ G0 ]" := (substitution 0 G G0)(at level 0, format "G [ G0 ]").
 
 Notation gt_pred := (fun n0 n1 g => bound_i n0 g && contractive_i n1 g).
-
+*)
 
 
 
