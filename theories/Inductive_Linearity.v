@@ -229,7 +229,7 @@ Qed.
 Unset Elimination Schemes. Check Forall.
 Inductive step : gType -> label  -> gType -> Prop :=
  | GR1 (a : action) u g : step (GMsg a u g) (a, inl u) g
- | GR2 a n d gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth d gs n)
+ | GR2 a n gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
  | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
  | GR4 a l gs gs' : size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
  | GR_rec g l g' n : step g[g GRec n g // n] l g'  -> step (GRec n g) l g'.
@@ -241,8 +241,8 @@ Hint Constructors step.
 Lemma step_ind
      :  forall P : gType -> label -> gType -> Prop,
        (forall (a : action) (u : value) (g : gType), P (GMsg a u g) (a, inl u) g) ->
-       (forall (a : action) (n : nat) (d : gType) (gs : seq gType),
-        n < size gs -> P (GBranch a gs) (a, inr n) (nth d gs n)) ->
+       (forall (a : action) (n : nat) (gs : seq gType),
+        n < size gs -> P (GBranch a gs) (a, inr n) (nth GEnd gs n)) ->
        (forall (a : action) (u : value) (l : label) (g1 g2 : gType),
         step g1 l g2 ->
         P g1 l g2 -> ptcp_to a \notin l.1 -> P (GMsg a u g1) l (GMsg a u g2)) ->
