@@ -4,210 +4,382 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 From Dep Require Import Global_Syntax Inductive_Linearity.
+From mathcomp Require Import finmap.
+Let inE := Global_Syntax.inE.
+Open Scope fset_scope.
+Open Scope fmap_scope.
 
 
-Lemma contractive_lt : forall (g : gType) i j, j < i -> contractive_i i g -> contractive_i j g.
-Proof.
-elim;auto.
-- rewrite /=. move => n i j. move/ltP=> + /leP;intros.  apply/leP. lia. 
-- move => g H.  rewrite /=. intros. have : j.+1 < i.+1. apply/ltP. move : H0. move/ltP. lia. eauto. 
-Qed.
-
-Lemma contractive_le : forall (g : gType) i j, j <= i -> contractive_i i g -> contractive_i j g.
-Proof.
-intros. destruct (eqVneq j i). subst. done. 
-have : j < i by lia. intros. eauto using contractive_lt.
+Lemma n_fset0 (n : nat) : [fset n] == fset0 = false.
+Proof. destruct (  ([fset n] == fset0)) eqn:Heqn.  move : Heqn. move/eqP/fsetP=>H. have : n \in [fset n] = false. by rewrite H !inE. 
+rewrite !inE.  done. done.
 Qed.
 
 
+Ltac split_and := intros;repeat (match goal with 
+                   | [ H : is_true (_ && _) |- _ ] => destruct (andP H);clear H
+                   | [ |- is_true (_ && _) ] => apply/andP;split 
 
-Lemma mu_height_subst : forall g0 g1  i, contractive_i (S i) g0 -> mu_height (substitution i g0 g1) = mu_height g0.
+                  end);auto.
+
+Lemma mu_height_subst : forall g0 g1  i, guarded i g0 -> contractive g0 -> mu_height (g0[g g1//i]) = mu_height g0.
 Proof. 
 elim; try solve [by rewrite /=].
-- rewrite /=. intros. case : (eqVneq n i) H. move=>->. by rewrite ltnn. by rewrite /=. 
-- intros. rewrite /=. f_equal. apply H. done. 
+- rewrite /=. intros. split_and. rewrite (negbTE H). done. 
+- intros. simpl. simpl in H0. split_and. destruct (i == n) eqn:Heqn.  rewrite eq_sym Heqn. done.  
+  simpl in H1. rifliad. split_and. simpl. f_equal. apply H.  done. done. 
 Qed.
+Lemma my_in_cons : forall (A :eqType) (a : A) l, a \in (a::l).
+Proof. intros. rewrite !inE. done. Qed.
 
+Lemma my_in_cons2 : forall (A :eqType) (a a0 : A) l, a \in l -> a \in (a0::l).
+Proof. intros. rewrite !inE H. lia. Qed.
 
-
-
-Lemma bound_lt : forall (g : gType) i j, i < j -> bound_i i g -> bound_i j g.
+Hint Resolve my_in_cons my_in_cons2.
+Lemma fv_g_subst : forall g g0 n, bound g0 -> fv_g (g[g g0 // n]) = fv_g g `\ n. 
 Proof. 
-elim.
-- rewrite /=;auto. move=>n i j.  move=> /leP H /ltP H1. apply/ltP.  lia. 
-- rewrite /=;auto. intros. apply : (@H i.+1 j.+1); done. 
-- rewrite /=;auto. 
-- intros. move : H1. rewrite /=.  move/allP=>H2. apply/allP. move=> l' Hin. move : (H2 l' Hin). 
-  apply H;auto. 
+elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
+- rifliad. rewrite (eqP H0). move : H.  rewrite /bound. move/eqP=>->. rewrite !inE. by destruct (eqVneq k n0).
+- rewrite /= !inE. destruct (eqVneq k n). subst. lia. lia. 
+- lia.
+- rifliad. rewrite /= (eqP H1) !inE. destruct (k != n0);rewrite /=. done. done.
+- rewrite /= H //= !inE. destruct (k != n);rewrite /=;try lia.  rewrite H //= !inE. done.
+- rewrite !big_map. induction l. rewrite !big_nil !inE. lia. 
+  rewrite !big_cons !inE H //= !inE. destruct (k != n);rewrite /=. destruct (k \in fv_g a0) eqn:Heqn;rewrite Heqn //=.
+  rewrite /= in IHl. apply IHl. intros. apply H. eauto. done. rewrite /= in IHl. apply IHl. intros. apply H. eauto. done.
 Qed.
 
-Lemma bound_le : forall (g : gType) i j, i <= j -> bound_i i g -> bound_i j g.
-Proof. intros. destruct (eqVneq i j). by subst. have : i < j by lia. 
-eauto using bound_lt.
+
+Lemma bound_subst : forall (g g': gType) i, fv_g g = [fset i] -> bound g' -> bound (substitution i g g').
+Proof. intros. move : H0. rewrite /bound. move/eqP=>HH. rewrite -HH. apply/eqP.  rewrite fv_g_subst. rewrite H HH. apply/fsetP=>k. rewrite !inE. destruct (eqVneq k i);done.  rewrite /bound. by apply/eqP.
 Qed.
 
-Lemma bound_0 : forall (g : gType) j, bound g -> bound_i j g.
+Lemma notin_guarded : forall g n, n \notin fv_g g  -> guarded n g.
+Proof. elim;rewrite /bound //=;intros. move : H. rewrite !inE. lia. move : H0. rewrite !inE. move/orP=>[]. lia. intros.  
+rewrite H //=. lia. 
+Qed.
+
+Lemma bound_notin : forall g n, bound g -> n \notin fv_g g.
+Proof. intros. rewrite /bound in H. rewrite (eqP H) !inE. done. Qed.
+Lemma bound_guarded : forall g n, bound g  -> guarded n g.
+Proof. intros. apply notin_guarded. apply bound_notin. done. Qed.
+
+Lemma guarded_subst : forall g g' n i, guarded n g -> bound g' -> guarded n (g)[g g' // i].
+Proof. elim;rewrite /=;intros. rifliad. apply bound_guarded. done. all:auto. 
+rifliad. simpl. destruct (orP H0). by rewrite H3.  rewrite H //=. lia.
+Qed.
+
+
+Lemma big_cup_in : forall (A : eqType) (B: choiceType) n (l : seq A) (f0 f1 : A -> {fset B}), (forall x n, x \in l -> n \in (f0 x) -> n \in (f1 x)) -> n \in \bigcup_(j <- l) (f0 j) ->  n \in \bigcup_(j <- l) (f1 j).
+Proof. move => A B n. elim. move => f0 f1.  rewrite big_nil. done. intros. move : H1. rewrite !big_cons !inE. move/orP=>[].  intros. rewrite H0 //=. intros. erewrite H. lia. intros. apply H0. eauto. eauto. apply b. 
+Qed.
+
+Lemma foldr_exists : forall (A : eqType) (B : choiceType) (l : seq A) (f0 : A -> {fset B}) p, p \in \bigcup_(j <- l) (f0 j) = has (fun x => p \in f0 x) l. 
+Proof. 
+move => A B. elim. move => f0 p. rewrite big_nil. done. intros. simpl. rewrite big_cons !inE. destruct ( (p \in f0 a) ) eqn:Heqn;rewrite /=. 
+done.
+apply H.
+Qed.
+
+Lemma contractive_subst : forall (g g': gType) i, (*i \in fv_g g ->*) contractive g -> contractive g' -> bound g' -> contractive (substitution i g g').
 Proof.
-intros. case : j. done. intros. apply  : (@bound_lt _ 0). done. done.
-Qed.
-Check max.
-
-Lemma subst_none : forall (g g': gType) i j, i <= j -> (bound_i i g) -> (substitution j g g') = g.   
-Proof.
-elim; intros;rewrite /=;try done.
--  rifliad.  simpl in H0.  lia.
-- f_equal. apply : H. have : i.+1 <= j.+1 by lia. intros. apply : x. done.
-- rewrite (H g' i j) //=.
-- f_equal. elim : l H H1. done.
-  intros. rewrite /=. f_equal. apply  : H1. by rewrite inE eqxx. apply : H0. simpl in H2. apply (andP H2). apply H.
-  intros.  apply : H1. by rewrite inE H3 orbC. apply : H4. done. simpl in *. apply (andP H2). 
-Qed.
-
-
-Lemma bound_subst : forall (g g': gType) i j, bound_i i.+1 g -> bound_i j g' -> bound_i (i + j) (substitution i g g').
-Proof.
-elim.
--  rewrite /=. intros. rifliad. move : H0. rewrite -(eqP H1). intros. apply : bound_le. 2: { apply : H0. }  lia. 
-  have : n < i by lia. intros. rewrite /bound_i. lia.
-- rewrite /=. done. 
-- rewrite /=. intros. have : (i + j).+1 = (i.+1 + j) by lia. move=>->. apply H. done. done.
-- rewrite /=. intros. auto. 
-- rewrite /=. intros. move : (allP H0)=> H2. apply/allP. move => l' /mapP. case. intros. 
-  subst. apply H;auto.
-Qed.
-
-Lemma bound_subst2 : forall (g g': gType) i j, j <= i -> bound_i i.+1 g -> bound_i j g' -> bound_i i (substitution i g g').
-Proof.
-elim.
--  rewrite /=. intros. rifliad. apply : bound_le. 2 : { eauto. } lia. simpl. lia. 
-- done. 
-- intros. simpl. apply : H. 3: {  eauto. } lia. done. 
-- rewrite /=. intros. auto. 
-- rewrite /=. eauto. 
-- intros. simpl in *. move : (allP H1)=> HH2. apply/allP. move => l' /mapP. case. intros. 
-  subst. eauto. 
-Qed.
-
-Lemma bound_contractive_subst : forall (g g': gType) i i2 j, bound_i i.+1 g -> contractive_i j g -> bound_i i2 g' -> (forall j, contractive_i j g') -> 
-contractive_i j (substitution i g g').
-Proof.
-elim.  (try solve [rewrite /= ;auto]).
+elim;  (try solve [rewrite /= ;auto]).
 - rewrite/=. move => v g' i j. case : (eqVneq v i).  done. simpl. done.
-- rewrite /=. intros. done. 
-- rewrite /=. intros. apply : H. done. done. apply : H2. apply : H3. 
-- rewrite /=.  intros. apply : H;eauto. 
-- rewrite /=. intros. apply/allP. move=> gsub /mapP. case. intros. subst. 
-  apply : H;eauto. auto using (allP H0), (allP H1). auto using (allP H1). 
+- intros. rewrite /=. rifliad. simpl. split_and. simpl in H1. split_and. apply guarded_subst. simpl in H0. split_and. done.  apply H. simpl in H0. move : H0. split_and. done. done. 
+- rewrite /=. intros. move : H0. intros. rewrite all_map. apply/allP=> l' Hin. simpl. apply H;auto.  
+  apply (allP H0). done. 
 Qed.
 
-Lemma bound_cont_eq : forall (g : gType) i, bound_i i g -> contractive_i i g -> (forall j, contractive_i j g).
+Lemma bound_contractive_subst : forall g0 g1 i, fv_g g0 = [fset i] -> bound g1 ->   contractive g0 -> contractive g1 ->  bound (g0[g g1//i]) && contractive (g0[g g1//i]).
 Proof.
-elim; rewrite/=;auto.
-- rewrite /=. move => v i /ltP + /leP. lia. 
-- rewrite /=. intros. eauto. 
+intros.  split_and. apply bound_subst;auto. apply contractive_subst;auto.  
 Qed.
 
-Lemma subst_mixin : forall g0 g1 n, gt_pred n.+1 n.+1  g0 -> gt_pred n n g1 -> gt_pred n n (substitution n g0 g1).
+
+Notation gt_pred g := (bound g && contractive g). 
+
+Lemma neg_sym : forall (A : eqType) (a b : A), (a != b) = (b != a).
 Proof.
-intros.  move : (andP H)=>[]. move : (andP H0)=>[]. intros. apply/andP. split.
-apply : bound_subst2. 3 : { eauto. } lia. eauto. 
-apply : bound_contractive_subst;eauto. 
-apply : contractive_lt. 2 : { eauto. } lia. apply : bound_cont_eq. 
-eauto. eauto. 
-Defined.
+intros. destruct (eqVneq a b).  done. done. 
+Qed.
 
 
-Lemma unf_mixin : forall (g : gType) (n : nat), gt_pred n n g -> gt_pred n n (unf g n).
+
+Notation negb_invol :=  Bool.negb_involutive.
+
+
+Lemma subst_nop : forall g g' x, x \notin (fv_g g) -> substitution x g g' = g. 
+Proof. 
+elim;rewrite /=;try done;intros. move : H. rewrite !inE.  rewrite neg_sym. move/negbTE=>->. done. 
+move : H0. rewrite !inE. move/orP=>[]. intros. by  rewrite eq_sym a. rifliad. intros. f_equal. auto. f_equal. 
+auto.
+f_equal. rewrite big_map in H0.  induction l. done. simpl. f_equal.  apply H.  rewrite !inE.  lia. move : H0. 
+rewrite big_cons. rewrite !inE. split_and. apply IHl. intros. apply H. rewrite !inE H1. lia. done. move : H0.  rewrite big_cons !inE. split_and. 
+Qed.
+
+Lemma unf_pred : forall (g : gType), gt_pred  g -> gt_pred (unf g).
 Proof.
 intros. rewrite /unf. destruct g. move : (andP H)=>[];intros.  apply/andP. split. simpl. simpl in a. lia. simpl in *. lia. 
 - done.
-- simpl in *. apply subst_mixin.  done. done. 
-  move : (andP H)=>[];intros. apply/andP. split. apply : bound_le. 2 : { eauto. } lia. done. 
-- simpl in *. move : (andP H)=>[];intros. apply/andP. split. 
-  apply/allP. move=> l' Hin. apply : bound_le. 2 : {  apply (allP a0).  done. } lia. done.
+- simpl in *. split_and. destruct (n \notin (fv_g g)) eqn:Heqn.  rewrite subst_nop //=.  move : H0.  rewrite /bound /=. rewrite /=.
+  rewrite mem_fsetD1 //=.  apply bound_subst. move : H0. rewrite /bound. simpl. intros. apply/fsetP=>k. rewrite !inE. 
+  destruct  (eqVneq k n). subst. have : n \in fv_g g. lia. done. have : false = (k \in fset0).  done. move=>->. move : H0. move/eqP/fsetP=>H0. rewrite -H0. rewrite !inE i /=. done. 
+  done. apply contractive_subst.  done. simpl. split_and. done. split_and. split_and. 
 Qed.
 
-Lemma iter_mixin : forall k (g : gType) (n : nat), gt_pred n n g -> gt_pred n n (iter k (fun g => unf g n) g).
+Lemma iter_pred : forall k (g : gType), gt_pred g -> gt_pred (iter k (fun g => unf g) g).
 Proof. elim;rewrite /=;intros. apply/andP.  destruct (andP H). split;auto. 
-apply unf_mixin. apply H. done. 
+apply unf_pred. apply H. done. 
 Qed.
 
 
-Lemma mu_height_unf : forall n g k, k <= n -> gt_pred n n g -> (mu_height g).-1 = mu_height (unf g k).
+Lemma mu_height_unf : forall g , gt_pred g -> (mu_height g).-1 = mu_height (unf g).
 Proof.
-move => n  g. rewrite /=. elim : g n; try solve [intros;rewrite /=;done].
-- intros. rewrite /=. have : k <= n.+1 by lia.  intros. apply H in x;auto. rewrite mu_height_subst. done.
-  apply : contractive_le. 2 : { apply (andP H1). } lia. 
+move => g. rewrite /=. elim : g; try solve [intros;rewrite /=;done].
+- intros. rewrite /=. split_and. simpl in H1,H2. split_and. rewrite mu_height_subst. done. done. done. 
 Qed.
 
 
-Lemma mu_height_iter_unf : forall k n g , gt_pred n n g -> (mu_height g) - k = (mu_height (iter k (fun g => unf g n) g)). 
+Lemma mu_height_iter_unf : forall k g , gt_pred g -> (mu_height g) - k = (mu_height (iter k (fun g => unf g) g)). 
 Proof.
 elim;intros. rewrite /=. lia.
 rewrite /=. have : mu_height g - n.+1 = (mu_height g - n).-1 by lia. move=>->. 
-erewrite H. 2 : {  eauto. } erewrite mu_height_unf. done. 2 : { apply iter_mixin. done. } lia.
+erewrite H. 2 : {  eauto. } erewrite mu_height_unf. done. apply iter_pred. done. 
 Qed.
 
 
-Lemma iter_unf_not_rec : forall n sg k, gt_pred n n sg -> mu_height sg <= k -> forall g, iter k (fun g => unf g n) sg <> GRec g.
+Lemma iter_unf_not_rec : forall sg k i, gt_pred sg -> mu_height sg <= k -> forall g, iter k (fun g => unf g) sg <> GRec i g.
 Proof.
 intros. simpl in *. apply (mu_height_iter_unf k) in H. move : H. 
-have : mu_height sg - k  = 0 by lia. move=>->. intros. destruct ((iter k (fun g => unf g n) sg));try done.
+have : mu_height sg - k  = 0 by lia. move=>->. intros. destruct ((iter k (fun g => unf g) sg));try done.
 Qed.
 
-Notation full_unf n g := (iter (mu_height g) (fun g' => unf g' n) g).
+Notation full_unf g := (iter (mu_height g) (fun g' => unf g') g).
 
 
-(*Section SubgType.
-Variable n : nat.
-
-Inductive subgType : Type := SubgType g of bound_i n g && contractive_i n g.
-
-Coercion gType_of_subgType sg := let: @SubgType g _  := sg in g.
-
-Canonical subgType_subType := [subType for gType_of_subgType].
-Definition subgType_eqMixin := Eval hnf in [eqMixin of subgType by <:].
-Canonical subgType_eqType := Eval hnf in EqType subgType subgType_eqMixin.
-
-Check subgType_ind.
-
-Lemma SGEnd_mixin : gt_pred n n GEnd.
-Proof. done. Qed.
-
-Definition SGEnd := SubgType SGEnd_mixin.
+(*Endpoint type*)
 
 
+Fixpoint eguarded n g := 
+match g with 
+| EVar n0 => n0 != n
+| ERec n0 g0 => (n == n0) || eguarded n g0
+| _ => true
+end.
 
-Lemma SGMsg_mixin : forall a u g, gt_pred n n g -> gt_pred n n (GMsg a u g).
-Proof. intros. rewrite /=.  move : (andP H)=>[]-> /=. eauto using contractive_le.
-Defined.
+Fixpoint econtractive g := 
+match g with 
+| ERec n g0 => (eguarded n g0) && (econtractive g0)
+| EMsg _ a u g0 => econtractive g0
+| EBranch _ a gs => all econtractive gs 
+| _ => true 
+end.
 
-Definition SGMsg a u (g : subgType) := SubgType (SGMsg_mixin a u (valP g)).
+Fixpoint efv g  :=
+  match g with
+  | EVar j => [fset j]
+  | EEnd => fset0
+  | EMsg _ _ _ g0 => efv g0
+  | EBranch _ _ gs => \bigcup_( i <- map efv gs) i 
+  | ERec n g0 => (efv g0) `\ n
+  end.
+
+Definition ebound g := efv g == fset0.
 
 
-Lemma SGBranch_mixin : forall a gs, all (gt_pred n n) gs -> gt_pred n n (GBranch a gs).
-Proof.
-move => a gs. intros. have : all (bound_i n) gs && (all (contractive_i n) gs). 
-move : H. elim : gs. done. intros. rewrite /=.  simpl in H0. move : H0. move/andP=>[] /andP. move=>[]. intros. rewrite a1 b /=. auto.
-move/andP=>[].  intros. rewrite /= a0 /=.  apply/allP. move=> x Hin.  apply : contractive_le. 2: { apply (allP b). done. } lia. 
-Defined.
+Fixpoint emu_height g :=
+match g with
+| ERec n g0 => (emu_height g0).+1
+| _ => 0
+end.
 
-Lemma seq_sub : forall (gs : seq subgType), all (gt_pred n n) (map val gs).
-Proof. elim.  done. intros. simpl. destruct a. rewrite /= i /=. done.
+Definition eunf g := if g is ERec n g' then (subst_e n g' g) else g.
+
+
+Lemma emu_height_subst : forall g0 g1  i, eguarded i g0 -> econtractive g0 -> emu_height (g0[e g1//i]) = emu_height g0.
+Proof. 
+elim; try solve [by rewrite /=].
+- rewrite /=. intros. split_and. rewrite (negbTE H). done. 
+- intros. simpl. simpl in H0. split_and. destruct (i == n) eqn:Heqn.  rewrite eq_sym Heqn. done.  
+  simpl in H1. rifliad. split_and. simpl. f_equal. apply H.  done. done. 
 Qed.
 
-Definition SGBranch  a (gs : seq subgType) := SubgType (SGBranch_mixin a (seq_sub gs)). 
 
-
-Lemma SGRec_mixin : forall g, gt_pred n.+1 n.+1 g ->  gt_pred n n (GRec g).
+Lemma fsubset_in : forall (A : choiceType) (b c : {fset A}), b `<=` c -> (forall j, j \in b -> j \in c).
 Proof.
-intros. rewrite /=. done.
-Defined.
-End SubgType.
+intros. Search _ fsub1set. move : H0. rewrite -!fsub1set.  intros. apply : fsubset_trans. apply : H0. apply H. 
+Qed.
 
-Definition SGRec n (g : subgType n.+1) := SubgType (@SGRec_mixin n g (valP g)).
-
-Lemma full_unf_sub : forall n (g : subgType n) g', (full_unf n g) <> GRec g'.
-Proof.
-intros. apply iter_unf_not_rec. destruct g. simpl in *. done. lia.
+(*Lemma efv_subst : forall g g0 n, efv g0 `<=` efv g  -> efv (g[e g0 // n]) = efv g `\ n. 
+Proof. 
+elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
+- rifliad. rewrite (eqP H0). move : H.  move/fsubset_in =>HH. rewrite -(eqP H0). specialize HH with k. rewrite !inE in HH. 
+destruct (k \in efv g0). destruct (eqVneq k n). specialize HH with k. rewrite -HH. move/fsubset_ rewrite /bound. move/eqP=>->. rewrite !inE. by destruct (eqVneq k n0).
+- rewrite /= !inE. destruct (eqVneq k n). subst. lia. lia. 
+- lia.
+- rifliad. rewrite /= (eqP H1) !inE. destruct (k != n0);rewrite /=. done. done.
+- rewrite /= H //= !inE. destruct (k != n);rewrite /=;try lia.  rewrite H //= !inE. done.
+- rewrite !big_map. induction l. rewrite !big_nil !inE. lia. 
+  rewrite !big_cons !inE H //= !inE. destruct (k != n);rewrite /=. destruct (k \in efv a) eqn:Heqn;rewrite Heqn //=.
+  rewrite /= in IHl. apply IHl. intros. apply H. eauto. done. rewrite /= in IHl. apply IHl. intros. apply H. eauto. done.
 Qed.*)
+
+Lemma efv_subst : forall g g0 n, ebound g0 -> efv (g[e g0 // n]) = efv g `\ n. 
+Proof. 
+elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
+- rifliad. rewrite (eqP H0). move : H.  rewrite /bound. move/eqP=>->. rewrite !inE. by destruct (eqVneq k n0).
+- rewrite /= !inE. destruct (eqVneq k n). subst. lia. lia. 
+- lia.
+- rifliad. rewrite /= (eqP H1) !inE. destruct (k != n0);rewrite /=. done. done.
+- rewrite /= H //= !inE. destruct (k != n);rewrite /=;try lia.  rewrite H //= !inE. done.
+- rewrite !big_map. induction l. rewrite !big_nil !inE. lia. 
+  rewrite !big_cons !inE H //= !inE. destruct (k != n);rewrite /=. destruct (k \in efv a) eqn:Heqn;rewrite Heqn //=.
+  rewrite /= in IHl. apply IHl. intros. apply H. eauto. done. rewrite /= in IHl. apply IHl. intros. apply H. eauto. done.
+Qed.
+
+
+Lemma ebound_subst : forall g g' i, efv g = [fset i] -> ebound g' -> ebound (subst_e i g g').
+Proof. intros. move : H0. rewrite /ebound. move/eqP=>HH. rewrite -HH. apply/eqP.  rewrite efv_subst. rewrite H HH. apply/fsetP=>k. rewrite !inE. destruct (eqVneq k i);done.  rewrite /ebound. by apply/eqP.
+Qed.
+
+Lemma notin_eguarded : forall g n, n \notin efv g  -> eguarded n g.
+Proof. elim;rewrite /ebound //=;intros. move : H. rewrite !inE. lia. move : H0. rewrite !inE. move/orP=>[]. lia. intros.  
+rewrite H //=. lia. 
+Qed.
+
+Lemma ebound_notin : forall g n, ebound g -> n \notin efv g.
+Proof. intros. rewrite /ebound in H. rewrite (eqP H) !inE. done. Qed.
+Lemma ebound_eguarded : forall g n, ebound g  -> eguarded n g.
+Proof. intros. apply notin_eguarded. apply ebound_notin. done. Qed.
+
+Lemma eguarded_subst : forall g g' n i, eguarded n g -> ebound g' -> eguarded n (g)[e g' // i].
+Proof. elim;rewrite /=;intros. rifliad. apply ebound_eguarded. done. all:auto. 
+
+rifliad. simpl. destruct (orP H0). by rewrite H3.  rewrite H //=. lia.
+Qed.
+
+
+
+Lemma econtractive_subst : forall g g' i, (*i \in efv g ->*) econtractive g -> econtractive g' -> ebound g' -> econtractive (subst_e i g g').
+Proof.
+elim;  (try solve [rewrite /= ;auto]).
+- rewrite/=. move => v g' i j. case : (eqVneq v i).  done. simpl. done.
+- intros. rewrite /=. rifliad. simpl. split_and. simpl in H1. split_and. apply eguarded_subst. simpl in H0. split_and. done.  apply H. simpl in H0. move : H0. split_and. done. done. 
+- rewrite /=. intros. move : H0. intros. rewrite all_map. apply/allP=> l' Hin. simpl. apply H;auto.  
+  apply (allP H0). done. 
+Qed.
+
+Lemma ebound_econtractive_subst : forall g0 g1 i, efv g0 = [fset i] -> ebound g1 ->   econtractive g0 -> econtractive g1 ->  ebound (g0[e g1//i]) && econtractive (g0[e g1//i]).
+Proof.
+intros.  split_and. apply ebound_subst;auto. apply econtractive_subst;auto.  
+Qed.
+
+
+Notation e_pred g := (ebound g && econtractive g). 
+
+
+Lemma subst_e_nop : forall g g' x, x \notin (efv g) -> subst_e x g g' = g. 
+Proof. 
+elim;rewrite /=;try done;intros. move : H. rewrite !inE.  rewrite neg_sym. move/negbTE=>->. done. 
+move : H0. rewrite !inE.  move/orP=>[]. intros. by  rewrite eq_sym a. rifliad. intros. f_equal. auto. f_equal. 
+auto.
+f_equal. rewrite big_map in H0.  induction l. done. simpl. f_equal.  apply H.  rewrite !inE.  lia. move : H0. 
+rewrite big_cons. rewrite !inE. split_and. apply IHl. intros. apply H. rewrite !inE H1. lia. done. move : H0.  rewrite big_cons !inE. split_and. 
+Qed.
+
+Lemma eunf_pred : forall g , e_pred  g -> e_pred (eunf g).
+Proof.
+intros. rewrite /eunf. destruct g. move : (andP H)=>[];intros.  apply/andP. split. simpl. simpl in a. lia. simpl in *. lia. 
+- done.
+- simpl in *. split_and. done. destruct (n \notin (efv g)) eqn:Heqn.  rewrite subst_e_nop //=.  move : H.  rewrite /ebound /=. rewrite /=.
+  rewrite mem_fsetD1 //=.  split_and. Check ebound_subst. split_and. apply ebound_subst. move : H0. rewrite /ebound. simpl. intros. apply/fsetP=>k. rewrite !inE. 
+  destruct  (eqVneq k n). subst. have : n \in efv g. lia. done. have : false = (k \in fset0).  done. move=>->. move : H0. move/eqP/fsetP=>H0. rewrite -H0. rewrite !inE i /=. done. 
+  done. apply econtractive_subst.  simpl in H1. split_and. done. done. 
+Qed.
+Check iter.
+Lemma eiter_pred : forall k e,  e_pred e -> e_pred (iter k (fun g => eunf g) e).
+Proof. elim;rewrite /=;intros. apply/andP.  destruct (andP H). split;auto. 
+apply eunf_pred. apply H. done. 
+Qed.
+
+
+Lemma emu_height_eunf : forall g , e_pred g -> (emu_height g).-1 = emu_height (eunf g).
+Proof.
+move => g. rewrite /=. elim : g; try solve [intros;rewrite /=;done].
+- intros. rewrite /=. split_and. simpl in H1,H2. split_and. rewrite emu_height_subst. done. done. done. 
+Qed.
+
+
+Lemma emu_height_iter_eunf : forall k g , e_pred g -> (emu_height g) - k = (emu_height (iter k (fun g => eunf g) g)). 
+Proof.
+elim;intros. rewrite /=. lia.
+rewrite /=. have : emu_height g - n.+1 = (emu_height g - n).-1 by lia. move=>->. 
+erewrite H. 2 : {  eauto. } erewrite emu_height_eunf. done. apply eiter_pred. done. 
+Qed.
+
+
+Lemma eiter_eunf_not_rec : forall sg k i, e_pred sg -> emu_height sg <= k -> forall g, iter k (fun g => eunf g) sg <> ERec i g.
+Proof.
+intros. simpl in *. apply (emu_height_iter_eunf k) in H. move : H. 
+have : emu_height sg - k  = 0 by lia. move=>->. intros. destruct ((iter k (fun g => eunf g) sg));try done.
+Qed.
+
+Notation full_eunf g := (iter (emu_height g) (fun g' => eunf g') g).
+
+
+
+
+
+
+
+
+
+Lemma in_foldr : forall l n,  n \in foldr (fun g' : gType => cat (fv_g g')) nil l ->  exists g, g \in l /\ n \in (fv_g g).
+Proof. elim;try done;move => l n H n'.
+rewrite /= mem_cat. move/orP=>[]. intros. exists l. rewrite !inE /= a. auto.
+move/H. move=>[] x [].  intros. exists x. rewrite !inE a b. lia. Qed.
+
+(*Lemma in_foldr2 : forall l n p g, g \in l -> n \in (efv (project  g p)) ->  n \in foldr (fun g' : gType => cat (efv (project g' p))) nil l.
+Proof. elim;try done;intros. move : H0.
+rewrite !inE. move/orP=>[]. move/eqP. intros. subst. simpl. rewrite mem_cat H1. done. intros.  simpl. rewrite mem_cat. apply/orP. right. apply : H. eauto. done. 
+Qed.*)
+
+
+(*
+Lemma fv_project_in : forall g p n, lpreds rec_pred g ->  (n \in (fv_g g)) -> (n  \in (efv (project g p))).
+Proof.
+elim;rewrite //=;intros. move : H1. rewrite !inE.  split_and. apply (H p) in H3;last cc.
+- rifliad. rewrite (eqP H1) in H3. simpl in H3. rewrite !inE in H3. lia. 
+  simpl. Admitted. 
+(*rewrite !inE.  split_and. 
+- apply (H p) in H1;last cc. rifliad.
+- rifliad. simpl. rewrite !big_map. 
+  apply : big_cup_in.  intros. apply : H. done. cc. cc. apply/big_cup_in.  intros. apply : H4.  apply/big_cup_in. intros. apply : H4. rewrite big_map in H1. done. 
+  rewrite /= !big_map.  apply : big_cup_in.  intros. apply : H. done. cc. eauto. rewrite big_map in H1. done. 
+- rewrite match_n. apply H. cc. cc. move : H1. rewrite big_map foldr_exists. move/hasP=>[] x. intros. 
+  intros.  move : p0. move/nthP=>Hnth. specialize Hnth with GEnd. destruct Hnth.
+
+  apply : fv_rproject_in. 
+  erewrite project_predP. apply : H. apply/mem_nth. apply : H1. cc. rewrite H4.  done. eauto.  cc.   all:cc. instantiate (1 := fresh a). rewrite /fresh. destruct (atom_fresh_for_list a). apply/negP.  move => HH. apply n0. destruct a. move : HH. rewrite !inE.  done. 
+Qed.*)
+
+Lemma fv_project_eq : forall g p n, lpreds rec_pred g ->  (n \in fv_g g) = (n \in efv (project g p)).
+Proof. intros. destruct ( (n \in fv_g g)) eqn:Heqn. rewrite fv_project_in //=.
+destruct ((n \in efv (project g p))) eqn:Heqn2. erewrite fv_rproject_in in Heqn. done. eauto. done. 
+Qed.*)
+
+
+
+Lemma fv_g_unf : forall g g0 n, bound g0 -> fv_g (g[g g0 // n]) = fv_g g `\ n. 
+Proof. 
+elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
+- rifliad. rewrite (eqP H0). move : H.  rewrite /bound. move/eqP=>->. rewrite !inE. by destruct (eqVneq k n0).
+- rewrite /= !inE. destruct (eqVneq k n). subst. lia. lia. 
+- lia.
+- rifliad. rewrite /= (eqP H1) !inE. destruct (k != n0);rewrite /=. done. done.
+- rewrite /= H //= !inE. destruct (k != n);rewrite /=;try lia.  rewrite H //= !inE. done.
+- rewrite !big_map. induction l. rewrite !big_nil !inE. lia. 
+  rewrite !big_cons !inE H //= !inE. destruct (k != n);rewrite /=. destruct (k \in fv_g a0) eqn:Heqn;rewrite Heqn //=.
+  rewrite /= in IHl. apply IHl. intros. apply H. eauto.  done. rewrite /= in IHl. apply IHl. intros. apply H. eauto. done.
+Qed.
+

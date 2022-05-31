@@ -1,9 +1,10 @@
 (*Require Export Dep.fintype. *)
 
-From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import all_ssreflect zify.
 From Equations Require Import Equations.
 From deriving Require Import deriving. Locate In.
 
+From Dep Require Export Utils. 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -220,8 +221,7 @@ End Elimination.
 
 Combined Scheme mut_ind_aux from gType_rect, mysort_rect, value_rect, endpoint_rect.
 
-Notation In := List.In.
-Notation Forall := List.Forall.
+
 Section SpecializeElimination. 
 Variables (Pg : gType -> Prop) 
           (Pv : value -> Prop) 
@@ -592,7 +592,6 @@ elim; try solve [by rewrite /=].
 - intros. rewrite /=. f_equal. apply H. done. 
 Qed.
 
-Definition unf g i := if g is GRec g' then (substitution i g' g) else g.
 
 
 
@@ -643,150 +642,91 @@ Notation "G [e G0 // X ]" :=  (subst_e X G G0)(at level 0, format "G [e  G0  // 
 
 
 Opaque substitute.
-(*Notation g_next g := (g_next_aux (unf g (mu_height g))).
+
+From mathcomp Require Import finmap.
+
+Open Scope fset_scope.
+Open Scope fmap_scope.
+
+Fixpoint guarded n g := 
+match g with 
+| GVar n0 => n0 != n
+| GRec n0 g0 => (n == n0) || guarded n g0
+| _ => true
+end.
+
+Fixpoint contractive g := 
+match g with 
+| GRec n g0 => (guarded n g0) && (contractive g0)
+| GMsg a u g0 => contractive g0
+| GBranch a gs => all contractive gs 
+| _ => true 
+end.
+
+Fixpoint fv_g (g : gType) :=
+  match g with
+  | GVar j => [fset j]
+  | GEnd => fset0
+  | GMsg _ _ g0 => fv_g g0
+  | GBranch _ gs => \bigcup_( i <- map fv_g gs) i 
+  | GRec n g0 => (fv_g g0) `\ n
+  end.
+
+Definition bound g := fv_g g == fset0.
 
 
-Notation bound := (bound_i 0).
-Notation contractive := (contractive_i 0).
+Fixpoint mu_height g :=
+match g with
+| GRec n g0 => (mu_height g0).+1
+| _ => 0
+end.
 
+Definition unf g := if g is GRec n g' then (substitution n g' g) else g.
 
-Notation gt_pred := (fun n0 n1 g => bound_i n0 g && contractive_i n1 g).
+Open Scope fset_scope.
+Open Scope fmap_scope.
+Definition env := {fmap ptcp -> endpoint}.  
+Definition ptcps := {fset ptcp}.
+
+Coercion ptcps_of_act (a : action) := ptcp_from a |` [fset ptcp_to a].
+
+Canonical action_predType := PredType (fun a p => p \in ptcps_of_act a). 
+
+Lemma ptcps_of_act_eq : forall a, ptcps_of_act a = [fset ptcp_from a; ptcp_to a].
+Proof. done. Qed.
+
+Lemma in_action_eq : forall p a, p \in ptcps_of_act a = (p == ptcp_from a) ||  (p == ptcp_to a).
+Proof. intros. destruct a. by rewrite /= /ptcps_of_act !inE /=.  Qed.
+
+ 
+
+(*Lemma in_ptcp_of_act_f : forall a, (ptcp_from a \in a).
+Proof. case. intros. rewrite //=. by  rewrite /ptcps_of_act //= !inE eqxx. Qed.
+
+Lemma in_ptcp_of_act_t : forall a, (ptcp_to a \in ptcps_of_act a).
+Proof. case. intros. rewrite //=.  rewrite /ptcps_of_act //= !inE eqxx. lia. Qed.
 *)
 
 
 
-(*
-attempt to simplify equality.axiom proof 
-b
 
-Definition eqb_i_eq {A} (r : A -> A -> bool) :=  forall g0 g1, r g0 g1 -> g0 = g1.
-
-
-
-Lemma test :  eqb_i_eq gType_eqb * (eqb_i_eq mysort_eqb * (eqb_i_eq value_eqb * eqb_i_eq endpoint_eqb)). 
-Proof. unfold eqb_i_eq.
-apply : mut_ind.
-move => n []; rewrite /= //=. by move=> n1 /eqP ->. 
-move => []; rewrite /= //=. 
-move => g IH []; rewrite /= //=. by  move=> g0 /IH ->. 
-move => a v IH0 g IH1 []; rewrite /= //=. move => a0 v0 g0. 
-by move/andP=>[] /andP [] /eqP -> /IH0 -> /IH1 ->. 
-
-move => a l IH0 []; rewrite /= //=. move => a0 l0. 
-move/andP=>[] /eqP ->.  intros. f_equal.
-apply/(list_eqb_i_eq IH0)/b. 
-
-move => l IH [] l1. rewrite/=. intros. f_equal.
-apply/(list_eqb_i_eq IH)/H.
-
-by rewrite /=.
-
-move => e IH p []; rewrite /= //=. by move => e0 p0 /andP [] /IH -> /eqP ->. 
-move => []; rewrite /= //=. 
-move => []; by rewrite /=. 
-
-move => g IH []; rewrite /=; try done. by move => g0 /IH=>->.
-
-move => a v IH0 g IH1 []; rewrite /= //=. move => a0 v0 g0. 
-by move/andP=>[] /andP [] /eqP -> /IH0 -> /IH1 ->. 
-
-move => a l IH0 []; rewrite /= //=. move => a0 l0. 
-move/andP=>[] /eqP ->.  intros. f_equal.
-apply/(list_eqb_i_eq IH0)/b. 
-
-move => l IH [] l1. rewrite/=. intros. f_equal.
-apply/(list_eqb_i_eq IH)/H.
-
-by rewrite /=.
-
-move => l IH [] l0. rewrite /=. elim : l l0 b IH0. case;auto. intros;done. move => a1 l IH [];first done.
-move => a2 l0 /andP []. intros. f_equal. apply IH0. simpl;auto. done. apply IH. auto. 
-simpl in*;auto.
+Fixpoint ptcps_of_g (g : gType) : {fset ptcp} := 
+match g with 
+| GMsg a _ g0 => a `|`(ptcps_of_g g0)
+| GBranch a gs => a `|` \bigcup_( i <- map ptcps_of_g gs) i
+| GRec n g0 => ptcps_of_g g0
+| _ => fset0
+end.
 
 
-move : (andP b)=>[]. auto. apply IH. intros. apply IH0. apply IH0. auto. apply IH0. auto. f_equal. move => a1 l IH.   intros. intros.  auto. /andP []. /eqP -> /IH0 -> /IH1 ->. 
+
+Definition label := (action * (value + nat))%type.
+
+Coercion to_action (l : label) : action := l.1.
 
 
-by move=> n1 /eqP ->. 
+(*Notation negb_invol :=  Bool.negb_involutive.*)
 
-Proof.
-elim
-Definition n_reflexive {A} (r : A -> A -> bool) := forall a0 a1, a0 <> a1 -> r a0 a1 = false. 
-Lemma n_refl_eqbs :  n_reflexive gType_eqb * (n_reflexive mysort_eqb * (n_reflexive value_eqb * n_reflexive endpoint_eqb)). 
-Proof. unfold n_reflexive.
-apply : mut_ind. 
+Let inE := (inE,in_action_eq,Bool.negb_involutive,eqxx,negb_or,negb_and).
 
-Admitted.
-
-
-Lemma test : Equality.axiom gType_eqb.
-Proof.
-move => g0 g1. case Heq : (gType_eqb g0 g1).
-- constructor. apply : refl_eqbs. move : Heq. case : refl_eqbs. rewrite /reflexive. rewrite refl_eqbs.
-intros;rewrite /= ?eqxx /=.
-case :a1 H.
- try solve [by rewrite /= | by rewrite H H0 | by rewrite H ].
-
-
-(*Ltac inject_refl := match goal with [ |- reflect (?f ?n = ?f ?n') _ ] => apply (@equivP (n = n')) end; last (try inject).
-Ltac inject_refl2 := match goal with [ |- reflect (?f ?n0 ?n1 = ?f ?n0' ?n1') _ ] => apply (@equivP (n0 = n0' /\ n1 = n1')) end; last (try inject2).
-
-Ltac inject_refl3 := match goal with [ |- reflect (?f ?n0 ?n1 ?n2 = ?f ?n0' ?n1' ?n2') _ ] => apply (@equivP (n0 = n0' /\ n1 = n1' /\ n2 = n2')) end; last (try inject3).*)
-
-Lemma reflect_and : forall p0 p1 b0 b1, reflect p0 b0 -> reflect p1 b1 ->  reflect (p0 /\ p1) (b0 && b1).
-Proof.
-intros. inversion H;inversion H0; rewrite /=. constructor. auto. 
-constructor. case. intros. auto. constructor. case. intros. done. constructor.  
-case. intros. done.
-Qed.
-
-Ltac eqbr := rewrite /= refl_eqbs ; try done.
-
-Ltac inj := split; solve [ by move/eqP=>-> | by case; move=>->].
-Lemma axioms_eqbs : reflexive gType_eqb *  (reflexive mysort_eqb *  (reflexive value_eqb *  reflexive endpoint_eqb)).
-Proof. apply : mut_ind; intros;rewrite /= ?eqxx /=; 
-       try solve [by rewrite /= | by rewrite H H0 | by rewrite H | by rewrite refl_eqbs |
-                  elim : l H;auto; intros; rewrite refl_eqbs //=; apply H; intros; apply H0; simpl;auto]. 
-Defined.
-
-Lemma iff_reflect : forall A (eqb : A -> A -> bool),
- (forall a0 a1, eqb a0 a1 <-> a0 = a1) -> forall x y , reflect (x = y) (eqb x y).
-Proof.
-intros. destruct (eqb x y) eqn:Heqn.
-- constructor.  rewrite <- H. done. constructor.  intro. specialize H with x y. destruct H. 
-  apply H1 in H0. rewrite Heqn in H0. done. 
-Qed.
-
-Lemma endpoint_axiom : Equality.axiom endpoint_eqb.
-Proof. move => e0 e1.  move : axioms_eqbs. do ? (case;intro). move : a.  move/iff_reflect.  done. 
-
-Proof. move => e e0. case Heq : (endpoint_eqb e e0). constructor. rewrite axioms_eqbs. move : Heq. rewrite -axioms_eqbs. move : axioms_eqbs. do ? (case;intro). move/iff_reflect. done. 
-Qed.
-
-Lemma gType_axiom : Equality.axiom gType_eqb.
-Proof. move : axioms_eqbs. do ? (case;intro). move : a.  move/iff_reflect.  done. 
-Qed.
-
-Lemma mysort_axiom : Equality.axiom mysort_eqb.
-Proof. move : axioms_eqbs. do ? (case;intro). move : a0.  move/iff_reflect.  done. 
-Qed.
-
-Lemma value_axiom : Equality.axiom value_eqb.
-Proof. move : axioms_eqbs. do ? (case;intro). move : a1.  move/iff_reflect.  done. 
-Qed.
-
-Definition endpoint_EqMixin := EqMixin endpoint_axiom.
-Canonical endpoint_EqType := EqType endpoint endpoint_EqMixin.
-
-Definition gType_EqMixin := EqMixin gType_axiom.
-Canonical gType_EqType := EqType gType gType_EqMixin.
-
-Definition mysort_EqMixin := EqMixin mysort_axiom.
-Canonical mysort_EqType := EqType mysort mysort_EqMixin.
-
-Definition value_EqMixin := EqMixin value_axiom.
-Canonical value_EqType := EqType value value_EqMixin.
-
-
-*)
 

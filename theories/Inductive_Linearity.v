@@ -8,20 +8,9 @@ Unset Printing Implicit Defensive.
 From deriving Require Import deriving.
 Require Import Dep.Global_Syntax.
 
-Ltac case_if := match goal with 
-                | [ |- context[if ?X then _ else _ ]] => have : X by subst
-                | [ |- context[if ?X then _ else _ ]] => have : X = false by subst 
-
-                | [ |- context[if ?X then _ else _ ]] => let H := fresh in destruct X eqn:H
-
-                end; try (move=>->).
-
-(*Ltac iflia := case_if;*)
-
-Ltac rifliad := (repeat case_if); try done.
+Let inE := Global_Syntax.inE.
 
 
-Definition label := (action * (value + nat))%type.
 
 
 Definition same_ch (a0 a1 : action) := action_ch a0 == action_ch a1.
@@ -85,13 +74,7 @@ Ltac contra_list := match goal with
                       | H : (nil = _ ++ _) |-  _ => apply List.app_cons_not_nil in H
                       end;contradiction.
 
-Definition in_action p a := let: Action p0 p1 k :=a in  (p==p0) || (p==p1).
 
-Definition pred_of_action (a : action) : {pred ptcp} := fun p => in_action p a.
-
-Canonical action_predType := PredType pred_of_action. 
-
-Coercion to_action (l : label) : action := l.1.
 
 
 
@@ -219,14 +202,9 @@ Qed.
 
 
 
-Lemma In_in : forall (A : eqType) (a : A) l, In a l <-> a \in l.
-Proof.
-move => A a. elim. split;done.
-intros. rewrite /= inE. split. case. move=>->. rewrite eqxx. done. move/H. move=>->. by rewrite orbC. 
-move/orP. case. move/eqP. move=>->. auto. move/H. auto. 
-Qed.
 
 Unset Elimination Schemes. Check Forall.
+
 Inductive step : gType -> label  -> gType -> Prop :=
  | GR1 (a : action) u g : step (GMsg a u g) (a, inl u) g
  | GR2 a n gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
@@ -262,9 +240,6 @@ intros. apply H3;auto. elim : f;auto.
 intros. apply H4;auto.
 Qed.
 
-Lemma Forall_forall
-     : forall (A : eqType) (P : A -> Prop) (l : seq A), Forall P l <-> (forall x : A, x \in l -> P x).
-Proof. intros. rewrite List.Forall_forall. split;intros;auto;by apply/H/In_in. Qed.
 
 
 Lemma step_tr_in : forall g vn g', step g vn g' -> forall s, Tr s g' -> Tr s g \/ exists n, Tr (insert s n vn.1) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) (take n s).
@@ -344,28 +319,28 @@ move => a0 l. rewrite cat_cons. rewrite -cat_cons. rewrite cat_path. by move/and
 Qed.
 
 
-Lemma in_action_from' : forall p0 p1 c, p0 \in Action p0 p1 c.
-Proof. intros. by rewrite /in_mem /= eqxx. Qed.
+(*Lemma in_action_from' : forall p0 p1 c, p0 \in Action p0 p1 c.
+Proof. intros.  rewrite !inE. by rewrite /in_mem /= eqxx. Qed.
 
 Lemma in_action_to' : forall p0 p1 c, p1 \in Action p0 p1 c.
-Proof. intros. by rewrite /in_mem /= orbC eqxx. Qed.
+Proof. intros. rewrite !inE.  by rewrite /in_mem /= orbC eqxx. Qed.*)
 
-Lemma in_action_from : forall a, ptcp_from a \in a.
+(*Lemma in_action_from : forall a, ptcp_from a \in a.
 Proof. intros. destruct a. rewrite /=. rewrite in_action_from' //=. Qed.
 
 Lemma in_action_to : forall a, ptcp_to a \in a.
-Proof. intros. destruct a. rewrite /=. rewrite in_action_to' //=. Qed.
+Proof. intros. destruct a. rewrite /=. rewrite in_action_to' //=. Qed.*)
 
-Hint Resolve in_action_from in_action_to in_action_from' in_action_to'.
+(*Hint Resolve in_action_from in_action_to in_action_from' in_action_to'.*)
 
 Lemma IO_in_action : forall a0 (l : action), IO a0 l -> (ptcp_to a0) \in l.
 Proof.
-move => a0 a1. rewrite /IO.  rewrite /IO. move/eqP=>->. apply in_action_from.
+move => a0 a1. rewrite /IO.  rewrite /IO. move/eqP=>->. by rewrite !inE. 
 Qed.
 
 Lemma II_in_action : forall a0 (l : action), II a0 l -> (ptcp_to a0) \in l.
 Proof.
-move => a0 a1. rewrite /II.  move/eqP=>->. apply in_action_to.
+move => a0 a1. rewrite /II.  move/eqP=>->. rewrite !inE. lia. 
 Qed.
 
 
