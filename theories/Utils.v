@@ -68,3 +68,16 @@ Ltac case_if := match goal with
 (*Ltac iflia := case_if;*)
 
 Ltac rifliad := (repeat case_if); try done.
+
+Lemma neg_sym : forall (A : eqType) (a b : A), (a != b) = (b != a).
+Proof.
+intros. destruct (eqVneq a b).  done. done. 
+Qed.
+
+Ltac split_and := intros;repeat (match goal with 
+                   | [ H : is_true (_ && _) |- _ ] => destruct (andP H);clear H
+                   | [ H : (_ && _) = true  |- _ ] => destruct (andP H);clear H
+
+                   | [ |- is_true (_ && _) ] => apply/andP;split 
+
+                  end);auto.

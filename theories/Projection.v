@@ -21,8 +21,8 @@ Inductive proj : gType -> ptcp -> endpoint -> Prop :=
                                proj (GBranch a gs) p e
 | cp_end p : proj GEnd p EEnd
 | cp_rec0 g p n : proj g p (EVar n)  -> proj (GRec n g) p EEnd
-| cp_rec1 g p e n : proj g p e  -> e <> EVar n -> n \in (efv e) -> proj (GRec n g) p (ERec n e)
-| cp_rec2 g p e n : proj g p e  ->  n \notin (efv e) -> proj (GRec n g) p e
+| cp_rec1 g p e n : proj g p e  -> e <> EVar n -> n \in (fv e) -> proj (GRec n g) p (ERec n e)
+| cp_rec2 g p e n : proj g p e  ->  n \notin (fv e) -> proj (GRec n g) p e
 | cp_var n p : proj (GVar n) p (EVar n).
 Hint Constructors proj.
 
@@ -69,18 +69,30 @@ list_lpreds [::3;4] H0. rewrite /= !inE. split_and.
 rewrite (negbTE H3) (negbTE H4) (negbTE H6) (negbTE H7) !match_n.  apply H. cc. cc. 
 Qed.
 
-
-
-Instance fv_project : forall g p, {goal lpreds [::bound] g} -> {goal bounde (project g p)}.
-Proof. intros. destruct H. constructor. rewrite /bounde. apply/eqP. apply/fsetP=>k. destruct ( (k \in efv (project g p))) eqn :Heqn. move : Heqn. rewrite project_clean_rproject fv_clean. nth_lpreds 0 H.  rewrite /bound. move/eqP/fsetP=>Hall. intros. rewrite -Hall. erewrite (@fv_rproject_in _ p).  done. rewrite project_clean_rproject.  rewrite fv_clean. done. rewrite !inE. done. 
+Lemma fv_rproject_in : forall g p n,  n  \in (fv (project g p)) -> n \in (fv g).
+Proof. move => g p n. rewrite project_clean_rproject fv_clean. move : g p n.
+elim;rewrite /=;intros;try done. move : H0. rewrite !inE. split_and. eauto.  
+destruct (p == ptcp_from a) eqn:Heqn.  simpl in H0. eauto. 
+destruct (p == ptcp_to a) eqn:Heqn2.  simpl in H0. eauto. 
+eauto. move : H0.  rifliad.  simpl. rs. eauto.  rs. rs_in H0. eauto. rs. apply : H. move : H0. rifliad. rs. eauto. eauto. 
+rs. rewrite big_map.
+move : H0. rifliad;rs;rewrite ?big_map. clear H0. elim : l H;intros;rewrite /=;rs. move : H0.   rewrite big_nil !inE. done. move : H1.  rewrite !big_cons !inE. move/orP=>[]. intros.  erewrite H0. lia.  auto. eauto. intros.  rewrite H. lia. intros. apply : H0. auto. eauto. done. clear H0 H1.
+elim : l H;intros;rewrite /=;rs. move : H0.   rewrite big_nil !inE. done. move : H1.  rewrite !big_cons !inE. move/orP=>[]. intros.  erewrite H0. lia.  auto. eauto. intros.  rewrite H. lia. intros. apply : H0. auto. eauto. done.
+destruct l. done. intros. rewrite big_cons !inE. erewrite H. done. rewrite !inE //=. eauto. 
 Qed.
 
-Lemma to_bounde e : (efv e == fset0) = bounde e. done. Qed.
 
-Lemma clean_rproject_subst : forall g g0 p i,  lpreds [::bound] g0 -> clean (rproject (g[g g0//i]) p) = (clean (rproject g p))[e (clean (rproject g0 p))//i].
-Proof. intros. rewrite rproject_subst clean_subst. done. rewrite -fv_clean. rewrite -project_clean_rproject. apply/eqP. rewrite to_bounde.  cc. Qed.
 
-Lemma project_subst : forall g g0 p i,  lpreds [::bound] g0  -> project g[g g0//i] p = (project g p)[e (project g0 p)//i].
+Instance fv_project : forall g p, {goal lpreds [::bound] g} -> {goal bound (project g p)}.
+Proof. intros. destruct H. constructor. apply/eqP. apply/fsetP=>k. destruct ( (k \in fv (project g p))) eqn :Heqn. move : Heqn. rewrite project_clean_rproject fv_clean. nth_lpreds 0 H.  rewrite /bound. move/eqP/fsetP=>Hall. intros. rewrite -Hall. erewrite (@fv_rproject_in _ p).  done. rewrite project_clean_rproject.  rewrite fv_clean. done. rewrite !inE. done. 
+Qed.
+
+(*Lemma to_bounde e : (fv e == fset0) = bounde e. done. Qed.*)
+
+Lemma clean_rproject_subst : forall g g0 p i,  lpreds [::bound] g0 -> clean (rproject (g[s g0//i]) p) = (clean (rproject g p))[s (clean (rproject g0 p))//i].
+Proof. intros. rewrite rproject_subst clean_subst. done. rewrite -fv_clean. rewrite -project_clean_rproject. apply/eqP.  cc. Qed.
+
+Lemma project_subst : forall g g0 p i,  lpreds [::bound] g0  -> project g[s g0//i] p = (project g p)[s (project g0 p)//i].
 Proof. intros. rewrite !project_clean_rproject. rewrite clean_rproject_subst //=. Qed.
 
 
@@ -122,7 +134,7 @@ Hint Resolve traverse_nth traverse_nth0.*)
 (*Missing setoid rewrite*)
 Lemma project_predP : forall a gs p i j, lpreds rec_pred (GBranch a gs) ->
  p \notin a -> i < size gs -> j < size gs -> (project (nth GEnd gs i) p) =f= (project (nth GEnd gs j) p).
-Proof. intros. (*erewrite <- project_predP_aux;eauto.   apply : project_predP_aux;eauto. *) Admitted.
+Proof. intros. erewrite <- project_predP_aux;eauto.   apply : project_predP_aux;eauto. Qed.  
 
 
 

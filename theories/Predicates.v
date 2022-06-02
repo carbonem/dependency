@@ -9,32 +9,11 @@ Unset Printing Implicit Defensive.
 
 From Dep Require Import Global_Syntax Inductive_Linearity Substitutions.
 
-(*Substitutions.*)
-Let inE := Global_Syntax.inE.
-Coercion ptcps_of_g : gType >-> finset_of.
-(*Lemma notin_label : forall p a, p \notin a = (p != (ptcp_from a)) && (p != (ptcp_to a)).
-Proof.
-intros. rewrite !inE.  Check in_ptcp_of_act_t.   destruct a.  rewrite  /ptcps_of_act /=. rewrite !inE. done. Qed.
 
-Lemma in_label : forall p a, p \in a = (p == (ptcp_from a)) || (p == (ptcp_to a)).
-Proof.
-intros. rewrite !inE.  destruct a. rewrite !inE.  by  rewrite !inE /=. 
-Qed.
-Check in_ptcp_of_act.
-*)
+Let inE := Substitutions.inE.
 
 
-
-
-
-Lemma neg_sym : forall (A : eqType) (a b : A), (a != b) = (b != a).
-Proof.
-intros. destruct (eqVneq a b).  done. done. 
-Qed.
-
-
-
-Lemma apply_allP : forall (A : eqType) (P : A -> bool) l x, all P l -> x \in l -> P x. intros. by apply (allP H). Qed.
+(*Lemma apply_allP : forall (A : eqType) (P : A -> bool) l x, all P l -> x \in l -> P x. intros. by apply (allP H). Qed.
 Lemma apply_allP2 : forall (A : eqType) (P : A -> bool) l x (P0 : bool), P0 && all P l -> x \in l -> P x. 
 intros. destruct (andP H). by apply (allP H2). Qed.
 
@@ -51,7 +30,7 @@ Lemma true_right : forall (b : bool), b -> b && true.
 Proof. intros. rewrite H. done. Qed.
 
 Hint Resolve and_left and_right mem_nth true_right. 
-
+*)
 
 
 
@@ -76,6 +55,9 @@ end.
 
 
 
+
+
+
 Fixpoint rproject g p := 
 match g with 
 | GEnd => EEnd
@@ -93,75 +75,75 @@ Fixpoint clean e :=
 match e with 
 | EMsg d c v e0 => EMsg d c v (clean e0)
 | EBranch d c es => EBranch d c (map clean es)
-| ERec n e0 => if clean e0 == EVar n then EEnd else if n \in efv e0 then ERec n (clean e0) else clean e0
+| ERec n e0 => if clean e0 == EVar n then EEnd else if n \in fv e0 then ERec n (clean e0) else clean e0
 | EVar j => EVar j
 | EEnd => EEnd
 end.
 
 
-Lemma fv_clean e :  efv (clean e) = efv e. 
+Lemma fv_clean e :  fv (clean e) = fv e. 
 Proof. elim : e;try solve [rewrite /=;try done];intros. 
-rewrite /=. rifliad. rewrite (eqP H0) in H. rewrite -H /=. by rewrite fsetDv. 
-Admitted.
-(* rewrite /= H. done. rewrite H. Search _ (?a `\` _ = ?a). rewrite mem_fsetD1 //=. lia. 
-rewrite /= !big_map. induction l. rewrite !big_nil. done. rewrite !big_cons. f_equal. rewrite H. done. rewrite !inE. done. apply IHl. intros. apply H. rewrite !inE H0.  lia.
-Qed.*)
+rewrite /=. rifliad. rewrite (eqP H0) in H. rs. rewrite -H /=. by rewrite fsetDv. rs. rewrite H. done.
+rewrite /= H. rs.  rewrite mem_fsetD1 //=. lia. 
+rs. rewrite /= !big_map. induction l. rewrite !big_nil. done. rewrite !big_cons. f_equal. rewrite H. done. rewrite !inE. done. apply IHl. intros. apply H. rewrite !inE H0.  lia.
+Qed.
 
 
-
-
-Lemma subst_nop : forall e e' x, x \notin (efv e) -> subst_e x e e' = e. Proof. 
+(*Lemma subst_nop : forall e e' x, x \notin (fv e) -> subst_e x e e' = e. Proof. 
 elim;rewrite /=;try done;intros. move : H. rewrite !inE.  rewrite neg_sym. move/negbTE=>->. done. 
 move : H0. rewrite !inE. move/orP=>[]. by rewrite eq_sym=>->.  
 intros. rifliad. rewrite H //=. 
 f_equal. auto. f_equal. rewrite big_map in H0.  induction l. done. simpl. f_equal.  apply H.  rewrite !inE.  lia. simpl in H0. move : H0. 
 rewrite big_cons. rewrite !inE. split_and. apply IHl. intros. apply H. rewrite !inE H1. lia. done. move : H0.  rewrite big_cons !inE. split_and. 
-Qed.
+Qed.*)
 
 
-Lemma efv_nil_var : forall e n, efv e = fset0 -> e <> EVar n. 
-Proof.
-elim;rewrite /=;try  done. intros. have : n \in [fset n]. by  rewrite !inE. move : H. move/fsetP=>->. done. 
-Qed.
 
 
-Lemma efv_subst : forall  e e' n x, efv e' = fset0 -> n <> x -> (n \in (efv (subst_e x e e'))) = (n \in (efv e)).
+(*Lemma fv_subst : forall  e e' n x, fv e' = fset0 -> n <> x -> (n \in (fv (subst_e x e e'))) = (n \in (fv e)).
 Proof. elim;rewrite /=;try done;intros. rewrite !inE. rifliad. rewrite H !inE. have : n0 == n = false by lia. by move=>->. 
 rewrite /= !inE. done. 
 rifliad. rewrite /=. Check mem_map. Search (_ \in (map _ _)). Search _ (_ \in _ = _ \in _).  Search _ ((is_true _ -> is_true _) -> _ = _). rewrite !inE.  destruct (n0 != n)eqn:Heqn;rewrite /= //=.   rewrite Heqn //=.
 apply H. done. done. rewrite Heqn //=. 
 rewrite !big_map.  elim : l H. rewrite !big_nil. done. intros. rewrite !big_cons. rewrite !inE. rewrite H2 //=. 
-destruct ( (n \in efv a)) eqn:Heqn; rewrite !Heqn //=. apply H. intros. apply H2. rewrite !inE H3. lia. done. done. 
-Qed.
-
-Lemma clean_subst : forall (e0 : endpoint)  e' x, efv e' = fset0 -> clean (e0[e e'//x]) = (clean e0)[e clean e'//x].
-Proof.
-elim;intros. 
-- simpl. rifliad.
-- simpl. done.
-- simpl. case_if.  
- * rewrite (eqP H1) /=. rifliad. Admitted. 
-(*by rewrite /= eqxx. rewrite subst_nop //=. rewrite efv_clean. lia. 
- * rewrite /= H //=.  rewrite efv_subst //=; last lia. symmetry. case_if.
-  ** by rewrite (eqP H2) /= H1 eqxx. 
-  ** case_if.
-   *** rewrite /= H1. rifliad. exfalso. move : H4. destruct (clean e);rewrite /=.  rifliad. move/eqP. apply : efv_nil_var. 
-       rewrite efv_clean //=. by rewrite H2. done. done. done. rifliad.
-
-   *** rifliad. exfalso. move : H4. destruct (clean e);rewrite /=.  rifliad. move/eqP. apply : efv_nil_var. 
-       rewrite efv_clean //=. by rewrite H2. done. done. done. rifliad.
-- rewrite /= H //=. 
-- rewrite /=. f_equal. rewrite -!map_comp. apply/eq_in_map. move => ll Hin /=. rewrite H //=.
+destruct ( (n \in fv a)) eqn:Heqn; rewrite !Heqn //=. apply H. intros. apply H2. rewrite !inE H3. lia. done. done. 
 Qed.*)
 
+Lemma fv_nil_evar : forall e n, fv e = fset0 -> e <> EVar n. 
+Proof.
+elim;rewrite /=;try  done. intros. have : n \in [fset n]. by  rewrite !inE. move : H. move/fsetP=>->. done. 
+Qed.
 
+Lemma fset_nil : forall (A : choiceType) (n : A), [fset n] = fset0 -> False.
+Proof. intros. move : H. move/fsetP=>HH. suff : n \in [fset n] = (n \in fset0). rewrite !inE. done. by rewrite HH. 
+Qed.
 
-Lemma rproject_subst : forall g g0 p i,  rproject (g[g g0//i]) p = (rproject g p)[e (rproject g0 p)//i].
-Proof. elim;rewrite /=;try done;intros. rifliad. rifliad. rewrite /=.  rewrite H. done.  
-rifliad. simpl. f_equal. done. simpl. f_equal. done. 
-rifliad. simpl. f_equal. 
+Lemma clean_subst : forall (e0 : endpoint)  e' x, fv e' = fset0 -> clean (e0[s e'//x]) = (clean e0)[s clean e'//x].
+Proof.
+elim;intros. 
+- rs. rifliad.
+- rs. done.
+- rs. case_if.  
+ * rs. rewrite (eqP H1) /=. rifliad. rs. by rewrite /= eqxx. rewrite subst_nop //=. rewrite fv_clean. lia. 
+ * rs. rewrite /= H //=.  rewrite fv_subst //=. symmetry. case_if.
+  ** rs. rewrite (eqP H2) /=. rs. rewrite H1 eqxx. done.
+  ** case_if.
+   *** rs. rewrite /= H1. rifliad. exfalso. move : H4.  destruct (clean e);rewrite /=;rs. rifliad. move/eqP. apply : fv_nil_evar. 
+       rewrite fv_clean //=. by rewrite H2. done. done. done. rifliad. 
+
+   *** rs. rifliad. exfalso. move : H5. rewrite !inE H3. have : n != x by lia. move=>->. done. rewrite !inE H3.
+       have : n != x by lia. move=>-> /=. rifliad. 
+       destruct (clean e);rewrite /=;rs.  rifliad. rewrite (eqP H5) in H4. rs_in H4. rewrite eqxx in H4. rewrite -fv_clean in H0.  rewrite (eqP H4) in H0. rs_in H0. by apply fset_nil in H0. rs_in H4. rewrite H5 in H4. lia. done.
+      all : try  by move : (eqP H4).   rs_in H4. rifliad. rs. f_equal. auto.  rs. f_equal. 
+- rewrite -!map_comp. apply/eq_in_map. move => ll Hin /=. rewrite H //=.
+Qed.
+
+Lemma rproject_subst : forall g g0 p i,  rproject (g[s g0//i]) p = (rproject g p)[s (rproject g0 p)//i].
+Proof. elim;rewrite /=;try done;intros;rs. rifliad. rifliad. rewrite /=.  rewrite H. done.  
+rifliad. simpl. rs. f_equal. done. simpl. rs. f_equal. done. 
+rifliad. simpl. rs. f_equal. 
 rewrite -!map_comp. apply/eq_in_map. move=>ll Hin. simpl. apply H.  done. 
-simpl. f_equal.
+simpl. rs.  f_equal.
 rewrite -!map_comp. apply/eq_in_map. move=>ll Hin. simpl. apply H.  done. destruct l. done. simpl. apply H. rewrite !inE. done. 
 Qed.
 
@@ -176,7 +158,7 @@ match g with
                                else if p == (ptcp_to a) then EMsg Rd (action_ch a) u (project g0 p) else project g0 p
 | GBranch a gs => if p == (ptcp_from a) then EBranch Sd (action_ch a) (map (fun g => project g p) gs)
                                 else if p == (ptcp_to a) then EBranch Rd (action_ch a) (map (fun g => project g p) gs) else if gs is g'::gs' then project g' p else EEnd
-| GRec n g => if (project g p) == EVar n then EEnd else if n \in efv (project g p) then ERec n (project g p) else project g p
+| GRec n g => if (project g p) == EVar n then EEnd else if n \in fv (project g p) then ERec n (project g p) else project g p
 | GVar n => EVar n
 end.
 
@@ -193,8 +175,7 @@ Proof.
 elim;rewrite /=;try done;intros.
 - rifliad.
  * move : H1. by  rewrite -H (eqP H0) eqxx. 
- * move : H1. Admitted. 
-(*by  rewrite -H (eqP H0) eqxx. 
+ * move : H1. by  rewrite -H (eqP H0) eqxx. 
  * move : H0. rewrite H (eqP H2) eqxx. done. 
  * rewrite H. done. 
  * rewrite H in H1. rewrite fv_clean in H1. lia. 
@@ -207,10 +188,9 @@ elim;rewrite /=;try done;intros.
  * rewrite -map_comp. induction l. done. simpl.  f_equal.  apply H. rewrite !inE. lia. apply IHl. intros. apply H. rewrite !inE H2.
  lia. 
 destruct l;try done.  apply H. rewrite !inE. done. 
-Qed.*)
+Qed.
 
-
-Lemma fv_rproject_in : forall g p n,  n  \in (efv (project g p)) -> n \in (fv_g g).
+(*Lemma fv_rproject_in : forall g p n,  n  \in (fv (project g p)) -> n \in (fv_g g).
 Proof. move => g p n. rewrite project_clean_rproject fv_clean. move : g p n.
 elim;rewrite /=;intros;try done. move : H0. rewrite !inE. split_and. eauto.  
 destruct (p == ptcp_from a) eqn:Heqn.  simpl in H0. eauto. 
@@ -221,12 +201,12 @@ elim : l H n.  rewrite !big_nil. done. intros. move : H2.  rewrite !big_cons !in
 
 elim : l H n.  done. simpl. intros. move : H3.  rewrite !big_cons !inE. move/orP=>[]. move/H2.  move=>-> //=. intros. apply/orP. right. apply H.  intros. apply : H2. rewrite !inE H3. lia. eauto. done. rewrite big_map.
 destruct l. done. intros. rewrite big_cons !inE. erewrite H. done. rewrite !inE //=. eauto. 
-Qed.
+Qed.*)
 
 
 
 
-Definition projmap  (S : ptcps) (g : gType)  : env := [fmap p : S => project g (val p)].
+Definition projmap  (S : fset_ptcp) (g : gType)  : env := [fmap p : S => project g (val p)].
 
 (*From metatheory*)
 Definition ptcp_le (p0 p1 : ptcp) := let: Ptcp n0 := p0 in let: Ptcp n1 := p1 in n0 <= n1.
@@ -247,7 +227,7 @@ Definition ptcp_le (p0 p1 : ptcp) := let: Ptcp n0 := p0 in let: Ptcp n1 := p1 in
     intros xs. destruct (nat_list_max xs) as [x H]. destruct x. exists (Ptcp (n.+1)).
     intros J. rewrite /ptcp_le in H. apply H in J. lia. 
   Qed. 
-Definition fresh (S : ptcps) :=
+Definition fresh (S : fset_ptcp) :=
     match atom_fresh_for_list S with
       (exist x _ ) => x
     end.
@@ -272,8 +252,8 @@ Inductive Unravele (r : endpoint -> endpoint -> Prop) : endpoint -> endpoint -> 
  | UVar n : Unravele r (EVar n) (EVar n)
  | UMsge u g0 g0' d c : r g0 g0' -> Unravele r (EMsg d c u g0) (EMsg d c u g0')
  | UBranche gs gs' d c : size gs = size gs' -> Forall (fun p => r p.1 p.2) (zip gs gs') ->  Unravele r (EBranch d c gs) (EBranch d c gs')
- | URece g g' n : r g[e ERec n g//n] g'  -> Unravele r (ERec n g) g'
- | URece2 g g' n : r g g'[e ERec n g'//n]  -> Unravele r g (ERec n g')
+ | URece g g' n : r g[s ERec n g//n] g'  -> Unravele r (ERec n g) g'
+ | URece2 g g' n : r g g'[s ERec n g'//n]  -> Unravele r g (ERec n g')
  | Utrans g0 g1 g2 : Unravele r g0 g1 -> Unravele r g1 g2 -> Unravele r g0 g2. (*Should be omitted later, probably not needed*)
 Hint Constructors Unravele.
 Notation "e0 =( R )= e1" := (Unravele R e0 e1)(at level 60).
@@ -340,11 +320,8 @@ Proof. Admitted.
 Fixpoint project_pred  (g : gType):=  
 match g with 
 | GMsg a u g0 => project_pred g0 
-| GBranch a gs => let S := ptcps_of_g g in 
+| GBranch a gs => let S := ptcps g in 
                  all (fun g' => all (fun p => ueqe_dec (project (nth GEnd gs 0) p) (project g' p)) (fresh S |` (S  `\` a))) gs && (all project_pred gs)
 | GRec _ g0 => project_pred g0
 | _ => true 
 end.
-
-Definition bound g := fv_g g == fset0.
-Definition bounde e := efv e == fset0.

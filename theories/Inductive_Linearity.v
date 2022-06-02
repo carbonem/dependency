@@ -6,9 +6,9 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 From deriving Require Import deriving.
-Require Import Dep.Global_Syntax.
+From Dep Require Import Global_Syntax Substitutions.
 
-Let inE := Global_Syntax.inE.
+Let inE := Substitutions.inE.
 
 
 
@@ -82,7 +82,7 @@ Inductive Tr : seq action -> gType  -> Prop :=
 | TR_nil G : Tr nil G 
 | TRMsg a u aa g0 : Tr aa g0 -> Tr (a::aa) (GMsg a u g0)
 | TRBranch d a n gs aa  : n < size gs -> Tr aa (nth d gs n) ->  Tr (a::aa) (GBranch a gs)
-| TRUnf aa g n : Tr aa (g[g GRec n g // n]) -> Tr aa (GRec n g).
+| TRUnf aa g n : Tr aa (g[s GRec n g // n]) -> Tr aa (GRec n g).
 Hint Constructors Tr.
 
 Definition exists_depP  (Pm : seq bool -> Prop) (P : seq action -> Prop) a0 aa a1 := exists m, size m = size aa /\ P (a0::((mask m aa))++[::a1]) /\ Pm m.
@@ -210,7 +210,7 @@ Inductive step : gType -> label  -> gType -> Prop :=
  | GR2 a n gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
  | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
  | GR4 a l gs gs' : size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
- | GR_rec g l g' n : step g[g GRec n g // n] l g'  -> step (GRec n g) l g'.
+ | GR_rec g l g' n : step g[s GRec n g // n] l g'  -> step (GRec n g) l g'.
 Set Elimination Schemes. 
 Hint Constructors step. 
 
@@ -228,7 +228,7 @@ Lemma step_ind
         Forall (fun p => step p.1 l p.2) (zip gs gs') ->  Forall (fun p => P p.1 l p.2) (zip gs gs') -> 
 
         ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
-       (forall g l g' n, step g[g GRec n g // n] l g' -> P (g[g GRec n g // n]) l g' -> P (GRec n g) l g') ->
+       (forall g l g' n, step g[s GRec n g // n] l g' -> P (g[s GRec n g // n]) l g' -> P (GRec n g) l g') ->
        forall (s : gType) (l : label) (s0 : gType), step s l s0 -> P s l s0.
 Proof.
 move => P H0 H1 H2 H3 H4. fix IH 4.
@@ -459,6 +459,30 @@ Qed.
 
 
 
+Lemma ch_diff : forall g a0 aa a1, Linear g -> Tr (a0::(aa++[::a1])) g  -> Forall ( fun a => (ptcp_to a) \notin a1) (a0::aa) ->  Forall (fun a => action_ch a != action_ch a1) (a0::aa).
+Proof.
+intros. apply/List.Forall_forall. intros. 
+destruct (eqVneq (action_ch x) (action_ch a1)); last done. inversion H1. subst.
+exfalso. simpl in H2. destruct H2. 
+- subst. apply : no_indep. apply : H5.  apply H6. move : H. move/Linear_1=>HH.  apply : HH. 
+  rewrite -[_::_]cat0s in H0. apply : H0. rewrite /same_ch. apply/eqP. done.
+- apply List.in_split in H2.  destruct H2,H2. rewrite H2 in H0. rewrite /Linear in H.
+  specialize H with (a0::x0) x x1 a1. 
+have : (a0 :: (x0 ++ (x :: x1)%SEQ)%list ++ [:: a1]) = ((a0 :: x0) ++ x :: x1 ++ [:: a1]).
+  rewrite /=. f_equal. rewrite -catA. f_equal.
+
+
+  intros. move : H0.  rewrite x2. move/H=>H3. 
+  have : same_ch x a1. by rewrite /same_ch e. move/H3. case. intros. move : H1.  
+  rewrite H2. intros. inversion H1. apply List.Forall_app in H8. destruct H8. inversion H9. apply : no_indep. 
+  apply H12.  apply H13.  done.
+Qed.
+
+
+
+
+
+(*Shorten proof by using distinct_ch*)
 Lemma Linear_step  : forall g l g', step g l g' -> Linear g -> Linear g'.
 Proof.
 intros. rewrite /Linear. intros. move : (step_tr_in H H1)=>[]. intros. eauto.  
