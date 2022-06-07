@@ -59,6 +59,72 @@ Proof.  destruct A. destruct class. done. Qed.
 Lemma fv_subst ( A: substType) : Substitution.axiom_fv_subst (@substitute A) (@fv A). 
 Proof.  destruct A. destruct class. done. Qed.
 
+
+(*
+Module Contractive.
+
+Definition axiom_nop (T : eqType) ( : nat -> T -> T ->T) (fv : T -> {fset nat})  :=  forall t t0 i, i \notin fv t -> substitute i t t0 = t.
+
+Definition axiom_fv_subst (T : eqType) (substitute : nat -> T -> T ->T) (fv : T -> {fset nat}) :=  
+forall t t0 i, fv t0 = fset0 -> fv (substitute i t t0) = fv t `\ i . 
+
+Record mixin_of (T : eqType) := Mixin {substitute : nat -> T -> T -> T; fv : T -> {fset nat};
+                                                        _ : axiom_nop substitute fv;
+                                                        _ : axiom_fv_subst substitute fv;}.
+Notation class_of := mixin_of.
+
+Record type : Type := Pack {sort : eqType; class : class_of sort; }.
+End Substitution. 
+Coercion Substitution.sort : Substitution.type >-> Equality.type.
+
+Notation substType := Substitution.type.
+Definition substitute T := Substitution.substitute (Substitution.class T).
+Definition fv T := Substitution.fv (Substitution.class T).
+Definition bound (A : substType) (g  : A)  :=  fv g == fset0.
+Arguments bound {_}.
+Print Substitution.sort.
+Arguments substitute {_} _ _ _ : simpl never.
+Arguments fv {_} _ : simpl never.
+
+Notation "G [s G0 // X ]" :=  (substitute X G G0)(at level 0, format "G [s  G0  //  X ]").
+*)
+
+(*Fixpoint eguarded n g := 
+match g with 
+| EVar n0 => n0 != n
+| ERec n0 g0 => (n == n0) || eguarded n g0
+| _ => true
+end.
+
+Fixpoint econtractive g := 
+match g with 
+| ERec n g0 => (eguarded n g0) && (econtractive g0)
+| EMsg _ a u g0 => econtractive g0
+| EBranch _ a gs => all econtractive gs 
+| _ => true 
+end.
+
+
+
+Fixpoint emu_height g :=
+match g with
+| ERec n g0 => (emu_height g0).+1
+| _ => 0
+end.
+
+Definition eunf g := if g is ERec n g' then (g'[s ERec n g'//n]) else g.
+
+Lemma emu_height_subst : forall g0 g1  i, eguarded i g0 -> econtractive g0 -> emu_height (g0[s g1//i]) = emu_height g0.
+Proof. 
+elim; try solve [by rewrite /=].
+- rewrite /=. rs.  intros. split_and. rewrite (negbTE H). done. 
+- intros. simpl. simpl in H0. rs. split_and. destruct (i == n) eqn:Heqn.  rewrite eq_sym Heqn. done.  
+  simpl in H1. rifliad. rs. split_and. 
+Qed.
+
+*)
+
+(*Add to recursion, unsound now*)
 Fixpoint gType_substitution (i : nat) g0 g1  :=
 match g0 with
 | GMsg a u g0' => GMsg a u (gType_substitution i g0' g1)
@@ -237,6 +303,13 @@ Proof. elim;rewrite /=;intros; rewrite /=.
 
   rifliad. rewrite fsetUA. done. rewrite fsetUA. fsetPtac. 
 Qed.
+
+
+
+
+
+
+
 
 
 

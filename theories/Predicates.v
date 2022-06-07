@@ -246,34 +246,392 @@ Notation unf := (paco2 UnravelE bot2).
 
 
 Definition ueqe e0 e1 := exists e, unf e0 e /\ unf e1 e.*)
+(**)
+(*Reserved Notation "e0 =f= e1" (at level 60). *)
 
-Inductive Unravele (r : endpoint -> endpoint -> Prop) : endpoint -> endpoint -> Prop :=
+
+Fixpoint eguarded n g := 
+match g with 
+| EVar n0 => n0 != n
+| ERec n0 g0 => (n == n0) || eguarded n g0
+| _ => true
+end.
+
+Fixpoint econtractive g := 
+match g with 
+| ERec n g0 => (eguarded n g0) && (econtractive g0)
+| EMsg _ a u g0 => econtractive g0
+| EBranch _ a gs => all econtractive gs 
+| _ => true 
+end.
+
+
+
+Fixpoint emu_height g :=
+match g with
+| ERec n g0 => (emu_height g0).+1
+| _ => 0
+end.
+
+Definition eunf g := if g is ERec n g' then (g'[s ERec n g'//n]) else g.
+
+Lemma emu_height_subst : forall g0 g1  i, eguarded i g0 -> econtractive g0 -> emu_height (g0[s g1//i]) = emu_height g0.
+Proof. 
+elim; try solve [by rewrite /=].
+- rewrite /=. rs.  intros. split_and. rewrite (negbTE H). done. 
+- intros. simpl. simpl in H0. rs. split_and. destruct (i == n) eqn:Heqn.  rewrite eq_sym Heqn. done.  
+  simpl in H1. rifliad. rs. split_and. 
+Qed.
+
+
+Lemma fsubset_in : forall (A : choiceType) (b c : {fset A}), b `<=` c -> (forall j, j \in b -> j \in c).
+Proof.
+intros. Search _ fsub1set. move : H0. rewrite -!fsub1set.  intros. apply : fsubset_trans. apply : H0. apply H. 
+Qed.
+
+(*Lemma efv_subst : forall (g : endpoint) g0 n, fv g0 `<=` fv g  -> fv (g[s g0 // n]) = fv g `\ n. 
+Proof. 
+elim;rewrite /=;rs;intros;apply/fsetP=>k;rewrite !inE.
+- rifliad. rewrite (eqP H0). move : H.  move/fsubset_in =>HH. rewrite -(eqP H0). specialize HH with k. rewrite !inE in HH. 
+destruct (k \in fv g0). destruct (eqVneq k n). simpl. specialize HH with k. rewrite -HH. move/fsubset_ rewrite /bound. move/eqP=>->. rewrite !inE. by destruct (eqVneq k n0).
+- rewrite /= !inE. destruct (eqVneq k n). subst. lia. lia. 
+- lia.
+- rifliad. rewrite /= (eqP H1) !inE. destruct (k != n0);rewrite /=. done. done.
+- rewrite /= H //= !inE. destruct (k != n);rewrite /=;try lia.  rewrite H //= !inE. done.
+- rewrite !big_map. induction l. rewrite !big_nil !inE. lia. 
+  rewrite !big_cons !inE H //= !inE. destruct (k != n);rewrite /=. destruct (k \in fv a) eqn:Heqn;rewrite Heqn //=.
+  rewrite /= in IHl. apply IHl. intros. apply H. eauto. done. rewrite /= in IHl. apply IHl. intros. apply H. eauto. done.
+Qed.*)
+
+(*Lemma fv_subst : forall g g0 n, ebound g0 -> fv (g[e g0 // n]) = fv g `\ n. 
+Proof. 
+elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
+- rifliad. rewrite (eqP H0). move : H.  rewrite /bound. move/eqP=>->. rewrite !inE. by destruct (eqVneq k n0).
+- rewrite /= !inE. destruct (eqVneq k n). subst. lia. lia. 
+- lia.
+- rifliad. rewrite /= (eqP H1) !inE. destruct (k != n0);rewrite /=. done. done.
+- rewrite /= H //= !inE. destruct (k != n);rewrite /=;try lia.  rewrite H //= !inE. done.
+- rewrite !big_map. induction l. rewrite !big_nil !inE. lia. 
+  rewrite !big_cons !inE H //= !inE. destruct (k != n);rewrite /=. destruct (k \in fv a) eqn:Heqn;rewrite Heqn //=.
+  rewrite /= in IHl. apply IHl. intros. apply H. eauto. done. rewrite /= in IHl. apply IHl. intros. apply H. eauto. done.
+Qed.*)
+
+
+Lemma bound_subst : forall (g : endpoint) g' i, fv g = [fset i] -> bound g' -> bound (g[s g'//i]).
+Proof. intros. move : H0. rewrite /bound. move/eqP=>HH. rewrite -HH. apply/eqP.  rewrite fv_subst. rewrite H HH. apply/fsetP=>k. rewrite !inE. destruct (eqVneq k i);done.  rewrite /bound. done. 
+Qed.
+
+Lemma notin_eguarded : forall g n, n \notin fv g  -> eguarded n g.
+Proof. elim;rewrite /bound //=;intros. move : H. rewrite !inE. lia. move : H0. rewrite !inE. move/orP=>[]. lia. intros.  
+rewrite H //=. lia. 
+Qed.
+
+Implicit Type (g : endpoint).
+
+Lemma bound_notin : forall g n, bound g -> n \notin fv g.
+Proof. intros. rewrite /bound in H. rewrite (eqP H) !inE. done. Qed.
+Lemma bound_eguarded : forall g n, bound g  -> eguarded n g.
+Proof. intros. apply notin_eguarded. apply bound_notin. done. Qed.
+
+Lemma eguarded_subst : forall g g' n i, eguarded n g -> bound g' -> eguarded n (g)[s g' // i].
+Proof. elim;rewrite /=;intros. rs. rifliad. apply bound_eguarded. done. done. rs. rifliad. rs. 
+
+
+destruct (orP H0). by rewrite H3.  rewrite H //=. lia. done. done.
+Qed.
+
+
+
+Lemma econtractive_subst : forall g g' i, (*i \in fv g ->*) econtractive g -> econtractive g' -> bound g' -> econtractive (substitute i g g').
+Proof.
+elim;  (try solve [rewrite /= ;auto]).
+- rewrite/=;rs. move => v g' i j. case : (eqVneq v i).  done. simpl. done.
+- intros. rewrite /=. rs. rifliad. simpl. split_and. simpl in H1. split_and. apply eguarded_subst. simpl in H0. split_and. done.  apply H. simpl in H0. move : H0. split_and. done. done. 
+- rewrite /=. rs. intros. move : H0. intros. rewrite all_map. apply/allP=> l' Hin. simpl. apply H;auto.  
+  apply (allP H0). done. 
+Qed.
+
+Lemma bound_econtractive_subst : forall g0 g1 i, fv g0 = [fset i] -> bound g1 ->   econtractive g0 -> econtractive g1 ->  bound (g0[s g1//i]) && econtractive (g0[s g1//i]).
+Proof.
+intros.  split_and. apply bound_subst;auto. apply econtractive_subst;auto.  
+Qed.
+
+
+Notation e_pred g := (bound g && econtractive g). 
+
+
+(*Lemma substitute_nop : forall g g' x, x \notin (fv g) -> substitute x g g' = g. 
+Proof. 
+elim;rewrite /=;try done;intros. move : H. rewrite !inE.  rewrite neg_sym. move/negbTE=>->. done. 
+move : H0. rewrite !inE.  move/orP=>[]. intros. by  rewrite eq_sym a. rifliad. intros. f_equal. auto. f_equal. 
+auto.
+f_equal. rewrite big_map in H0.  induction l. done. simpl. f_equal.  apply H.  rewrite !inE.  lia. move : H0. 
+rewrite big_cons. rewrite !inE. split_and. apply IHl. intros. apply H. rewrite !inE H1. lia. done. move : H0.  rewrite big_cons !inE. split_and. 
+Qed.*)
+
+Lemma eunf_pred : forall g , e_pred  g -> e_pred (eunf g).
+Proof.
+intros. rewrite /eunf. destruct g. move : (andP H)=>[];intros.  apply/andP. split. simpl. simpl in a. lia. simpl in *. lia. 
+- done.
+- simpl in *. split_and. done. destruct (n \notin (fv g)) eqn:Heqn.  rewrite subst_nop //=.  move : H.  rewrite /bound /=. rewrite /=. rs.
+  rewrite mem_fsetD1 //=.  rs. split_and. 
+
+ split_and. apply bound_subst. move : H0. rewrite /bound. rs. intros. apply/fsetP=>k. rewrite !inE. 
+  destruct  (eqVneq k n). subst. have : n \in fv g. lia. done. have : false = (k \in fset0).  done. move=>->. move : H0. move/eqP/fsetP=>H0. rewrite -H0. rewrite !inE i /=. done. 
+  done. apply econtractive_subst.  simpl in H1. split_and. done. done. 
+Qed.
+
+
+Lemma eiter_pred : forall k e,  e_pred e -> e_pred (iter k (fun g => eunf g) e).
+Proof. elim;rewrite /=;intros. apply/andP.  destruct (andP H). split;auto. 
+apply eunf_pred. apply H. done. 
+Qed.
+
+
+Lemma emu_height_eunf : forall g , e_pred g -> (emu_height g).-1 = emu_height (eunf g).
+Proof.
+move => g. rewrite /=. elim : g; try solve [intros;rewrite /=;done].
+- intros. rewrite /eunf. rs.  rewrite /=. rs. split_and. simpl in H1,H2. split_and. rewrite emu_height_subst. done. done. done. 
+Qed.
+
+
+Lemma emu_height_iter_eunf : forall k g , e_pred g -> (emu_height g) - k = (emu_height (iter k (fun g => eunf g) g)). 
+Proof.
+elim;intros. rewrite /=. lia.
+rewrite /=. have : emu_height g - n.+1 = (emu_height g - n).-1 by lia. move=>->. 
+erewrite H. 2 : {  eauto. } erewrite emu_height_eunf. done. apply eiter_pred. done. 
+Qed.
+
+
+Lemma eiter_eunf_not_rec : forall sg k i, e_pred sg -> emu_height sg <= k -> forall g, iter k (fun g => eunf g) sg <> ERec i g.
+Proof.
+intros. simpl in *. apply (emu_height_iter_eunf k) in H. move : H. 
+have : emu_height sg - k  = 0 by lia. move=>->. intros. destruct ((iter k (fun g => eunf g) sg));try done.
+Qed.
+
+Notation full_eunf g := (iter (emu_height g) (fun g' => eunf g') g). 
+
+
+Definition next g :=
+match full_eunf g with 
+| EMsg _ _ _ g0 => [::g0]
+| EBranch _ _ gs => gs
+| _ => [::]
+end.
+
+Definition act_of g :=
+match full_eunf g with 
+| EMsg _ a _ _ => Some a
+| EBranch _ a _ => Some a
+| _ => None
+end.
+
+Inductive bisimilar_f (r : endpoint -> endpoint -> Prop) : endpoint -> endpoint -> Prop :=
+ BF e0 e1 : act_of e0 = act_of e1 -> size (next e0) = size (next e1) -> Forall (fun p => r p.1 p.2) (zip (next e0) (next e1)) ->  bisimilar_f r e0 e1.
+
+
+Lemma mono_bisim : monotone2 bisimilar_f.
+Proof.
+move => x. intros. induction IN. constructor. done. done.
+apply/forallzipP. done. intros. move : H1. move/forallzipP=>Hzip. 
+simpl in Hzip.  simpl. apply LE. apply : Hzip. done. done. 
+Grab Existential Variables. all : repeat constructor.
+Qed. 
+
+Hint Resolve mono_bisim : paco.
+
+Definition bisimilar e0 e1  : Prop := paco2 bisimilar_f bot2 e0 e1.
+
+Fixpoint bisim_dec_aux n S e0 e1 :=
+if n is n'.+1 then ((e0,e1) \in S) || (act_of e0 == act_of e1) && (size (next e0) == size (next e1)) && 
+all (fun p => bisim_dec_aux n' ((e0,e1)::S) p.1 p.2) (zip (next e0) (next e1))
+else (e0,e1) \in S.
+Open Scope nat_scope.
+
+Fixpoint esize e := 
+match e with 
+| EMsg _ _ _ e0 => (esize e0).+1
+| EBranch _ _ es => foldr (fun e0 acc => (esize e0) + acc ) 0 es
+| ERec N e0 => (esize e0).+1
+| _ => 1
+end.
+
+Fixpoint bisim_dec e0 e1 := bisim_dec_aux ((esize e0) * (esize e1)) nil e0 e1.
+
+Lemma bisimP : forall e0 e1, reflect (bisimilar e0 e1) (bisim_dec e0 e1). 
+Proof. Admitted.
+Lemma bisimP2 : forall e0 e1 R S, (forall e0 e1, R e0 e1 <-> (e0,e1) \in S ) -> exists n,  (bisimilar_f R e0 e1) <-> (bisim_dec_aux n S e0 e1). 
+Proof. Admitted.
+
+Fixpoint project_pred  (g : gType):=  
+match g with 
+| GMsg a u g0 => project_pred g0 
+| GBranch a gs => let S := ptcps g in 
+                 all (fun (g' : gType)  => 
+                         all (fun p => bisim_dec (project (nth GEnd gs 0) p) (project g' p)) 
+                         (fresh S |` (S `\` a )))
+                      gs
+                 && (all project_pred gs)
+| GRec _ g0 => project_pred g0
+| _ => true 
+end.
+
+
+
+
+
+
+(*Lemma in_foldr : forall l n,  n \in foldr (fun g' : gType => cat (fv_g g')) nil l ->  exists g, g \in l /\ n \in (fv_g g).
+Proof. elim;try done;move => l n H n'.
+rewrite /= mem_cat. move/orP=>[]. intros. exists l. rewrite !inE /= a. auto.
+move/H. move=>[] x [].  intros. exists x. rewrite !inE a b. lia. Qed.*)
+
+(*Lemma in_foldr2 : forall l n p g, g \in l -> n \in (fv (project  g p)) ->  n \in foldr (fun g' : gType => cat (fv (project g' p))) nil l.
+Proof. elim;try done;intros. move : H0.
+rewrite !inE. move/orP=>[]. move/eqP. intros. subst. simpl. rewrite mem_cat H1. done. intros.  simpl. rewrite mem_cat. apply/orP. right. apply : H. eauto. done. 
+Qed.*)
+
+
+(*
+Lemma fv_project_in : forall g p n, lpreds rec_pred g ->  (n \in (fv_g g)) -> (n  \in (fv (project g p))).
+Proof.
+elim;rewrite //=;intros. move : H1. rewrite !inE.  split_and. apply (H p) in H3;last cc.
+- rifliad. rewrite (eqP H1) in H3. simpl in H3. rewrite !inE in H3. lia. 
+  simpl. Admitted. 
+(*rewrite !inE.  split_and. 
+- apply (H p) in H1;last cc. rifliad.
+- rifliad. simpl. rewrite !big_map. 
+  apply : big_cup_in.  intros. apply : H. done. cc. cc. apply/big_cup_in.  intros. apply : H4.  apply/big_cup_in. intros. apply : H4. rewrite big_map in H1. done. 
+  rewrite /= !big_map.  apply : big_cup_in.  intros. apply : H. done. cc. eauto. rewrite big_map in H1. done. 
+- rewrite match_n. apply H. cc. cc. move : H1. rewrite big_map foldr_exists. move/hasP=>[] x. intros. 
+  intros.  move : p0. move/nthP=>Hnth. specialize Hnth with GEnd. destruct Hnth.
+
+  apply : fv_rproject_in. 
+  erewrite project_predP. apply : H. apply/mem_nth. apply : H1. cc. rewrite H4.  done. eauto.  cc.   all:cc. instantiate (1 := fresh a). rewrite /fresh. destruct (atom_fresh_for_list a). apply/negP.  move => HH. apply n0. destruct a. move : HH. rewrite !inE.  done. 
+Qed.*)
+
+Lemma fv_project_eq : forall g p n, lpreds rec_pred g ->  (n \in fv_g g) = (n \in fv (project g p)).
+Proof. intros. destruct ( (n \in fv_g g)) eqn:Heqn. rewrite fv_project_in //=.
+destruct ((n \in fv (project g p))) eqn:Heqn2. erewrite fv_rproject_in in Heqn. done. eauto. done. 
+Qed.*)
+
+
+
+(*Lemma fv_g_unf : forall g g0 n, bound g0 -> fv_g (g[g g0 // n]) = fv_g g `\ n. 
+Proof. 
+elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
+- rifliad. rewrite (eqP H0). move : H.  rewrite /bound. move/eqP=>->. rewrite !inE. by destruct (eqVneq k n0).
+- rewrite /= !inE. destruct (eqVneq k n). subst. lia. lia. 
+- lia.
+- rifliad. rewrite /= (eqP H1) !inE. destruct (k != n0);rewrite /=. done. done.
+- rewrite /= H //= !inE. destruct (k != n);rewrite /=;try lia.  rewrite H //= !inE. done.
+- rewrite !big_map. induction l. rewrite !big_nil !inE. lia. 
+  rewrite !big_cons !inE H //= !inE. destruct (k != n);rewrite /=. destruct (k \in fv_g a0) eqn:Heqn;rewrite Heqn //=.
+  rewrite /= in IHl. apply IHl. intros. apply H. eauto.  done. rewrite /= in IHl. apply IHl. intros. apply H. eauto. done.
+Qed.
+
+*)
+
+
+(*
+Inductive unf_eq : endpoint -> endpoint -> Prop :=
+
+(*Use Pierces algorithm*)
+Inductive unf_eq : endpoint -> endpoint -> Prop :=
+ | UEE : EEnd =f= EEnd
+ | UEV n :  (EVar n) =f= (EVar n)
+ | UEM u g0 g0' d c : g0 =f= g0' -> (EMsg d c u g0) =f= (EMsg d c u g0')
+ | UEB gs gs' d c : esize gs = esize gs' -> Forall (fun p => p.1 =f= p.2) (zip gs gs') ->   (EBranch d c gs) =f= (EBranch d c gs')
+ | UER2 g g' n : g' =f= g'  -> (ERec n g) =f=  (ERec n g')
+ | UERL g g' n : g[s ERec n g//n] =f= g'  -> (ERec n g) =f=  g'
+ | UERR g g' n : g =f= g'[s ERec n g'//n]  -> g =f= (ERec n g')
+ where "e0 =f= e1" := (unf_eq e0 e1).
+Set Elimination Schemes.
+Hint Constructors unf_eq.
+
+
+Lemma unf_eq_ind
+     : forall P : endpoint -> endpoint -> Prop,
+       P EEnd EEnd ->
+       (forall n : nat, P (EVar n) (EVar n)) ->
+       (forall (u : value) (g0 g0' : endpoint) (d : dir) (c : ch), g0 =f= g0' -> P g0 g0' -> P (EMsg d c u g0) (EMsg d c u g0')) ->
+       (forall (gs gs' : seq endpoint) (d : dir) (c : ch),
+        esize gs = esize gs' -> 
+Forall (fun p : endpoint * endpoint => p.1 =f= p.2) (zip gs gs') -> 
+Forall (fun p : endpoint * endpoint => P p.1  p.2) (zip gs gs') ->
+P (EBranch d c gs) (EBranch d c gs')) ->
+
+       (forall (g g' : endpoint) (n : nat), g' =f= g' -> P g' g' -> P (ERec n g) (ERec n g')) ->
+       (forall (g : endpoint_substType) (g' : endpoint) (n : nat), (g)[s ERec n g // n] =f= g' -> P (g)[s ERec n g // n] g' -> P (ERec n g) g') ->
+       (forall (g : endpoint) (g' : endpoint_substType) (n : nat), g =f= (g')[s ERec n g' // n] -> P g (g')[s ERec n g' // n] -> P g (ERec n g')) ->
+       forall e e0 : endpoint, e =f= e0 -> P e e0.
+Proof. 
+intros. move : e e0 H6. fix IH 3. intros. destruct H6.
+apply H. apply H0. apply H1. auto. auto. apply H2. done. 
+done. induction H7. done. constructor. auto. done. apply H3. done. 
+auto. apply : H4. done. auto. apply : H5. done. auto. 
+Qed.
+
+
+Fixpoint unf_dec e0 e1 :=
+match e0,e1 with 
+| EEnd,EEnd => true
+| EVar n,EVar n' => n == n'
+| EMsg d c u e0', EMsg d' c' u' e1' =>  (d == d') && (c == c') && (u == u') && (unf_dec e0' e1')
+| ERec n e0', ERec n' e1' =>  if n == n' then unf_dec e0' e1'
+                             else unf_dec (ERec n e0') (e1'[s ERec n' e1'])
+ ( == d') && (c == c') && (u == u') && (unf_dec e0' e1')
+
+
+(*Inductive Unravele (r : endpoint -> endpoint -> Prop) : endpoint -> endpoint -> Prop :=
  | UEnde : Unravele r EEnd EEnd
  | UVar n : Unravele r (EVar n) (EVar n)
- | UMsge u g0 g0' d c : r g0 g0' -> Unravele r (EMsg d c u g0) (EMsg d c u g0')
- | UBranche gs gs' d c : size gs = size gs' -> Forall (fun p => r p.1 p.2) (zip gs gs') ->  Unravele r (EBranch d c gs) (EBranch d c gs')
+ | UMsge u g0 g0' d c :  r g0 g0' -> Unravele r (EMsg d c u g0) (EMsg d c u g0')
+ | UBranche gs gs' d c : esize gs = esize gs' -> Forall (fun p => r p.1 p.2) (zip gs gs') ->  Unravele r (EBranch d c gs) (EBranch d c gs')
  | URece g g' n : r g[s ERec n g//n] g'  -> Unravele r (ERec n g) g'
  | URece2 g g' n : r g g'[s ERec n g'//n]  -> Unravele r g (ERec n g')
  | Utrans g0 g1 g2 : Unravele r g0 g1 -> Unravele r g1 g2 -> Unravele r g0 g2. (*Should be omitted later, probably not needed*)
 Hint Constructors Unravele.
-Notation "e0 =( R )= e1" := (Unravele R e0 e1)(at level 60).
+Notation "e0 =( R )= e1" := (Unravele R e0 e1)(at level 60).*)
 
-Notation "e =f= e1" := (paco2 Unravele bot2 e e1)(at level 60).
+(*Notation "e =f= e1" := (paco2 Unravele bot2 e e1)(at level 60).*)
 
 
 (*Notation eq_unf e0 e1 := (is_true (eunf e0 == eunf e1)).*)
+(*Lemma ueqe_refl_unf : forall e e' i, bound e' -> e' =f= e' -> e =f= e /\ e[s e'//i] =f= e[s e'//i].
+Proof. elim;rewrite/=;rs;intros. rifliad. auto. auto. auto.
+rifliad. split. 
+pfold. constructor. left. pfold. constructor. left. apply H in H0 as H'.
+have : e =f= e /\ (e)[s e' // i] =f= (e)[s e' // i]. apply : H. done. done.
+move=>[]. intros.
+ apply/Forall_forall. intros. move : H. move/nthP=>Hnth. specialize Hnth with (EEnd,EEnd). destruct Hnth. rewrite -H0. rewrite nth_zip /=. right. apply CIH. done. pfold. constructor. left. pfold. constructor.  right. done. 
+Qed.*)
+
+Fixpoint eguarded n g := 
+match g with 
+| EVar n0 => n0 != n
+| ERec n0 g0 => (n == n0) || eguarded n g0
+| _ => true
+end.
+
+Fixpoint econtractive g := 
+match g with 
+| ERec n g0 => (eguarded n g0) && (econtractive g0)
+| EMsg _ a u g0 => econtractive g0
+| EBranch _ a gs => all econtractive gs 
+| _ => true 
+end.
 
 Lemma ueqe_refl : forall e,  e =f= e.
-Proof. pcofix CIH. case;auto;intros. 
-pfold. constructor. done. apply/Forall_forall. intros. move : H. move/nthP=>Hnth. specialize Hnth with (EEnd,EEnd). destruct Hnth. rewrite -H0. rewrite nth_zip /=. right. apply CIH. done. pfold. constructor. left. pfold. constructor.  right. done. 
+Proof. 
+elim;rewrite /=;intros;try done. by  constructor. by constructor. constructor. done. apply/forallzipP. done. simpl. intros. have : (nth EEnd l x0) \in l. apply/mem_nth. done. move/H. eauto. 
 Qed.
-Ltac ich H := inversion H;clear H;subst;try done.
-Ltac pc := pfold;constructor.
 
 Hint Resolve ueqe_refl. 
 
 Lemma ueqe_sym  : forall e0 e1, e0 =f= e1 ->  e1 =f= e0. 
-Proof. Admitted.
+Proof. intros. induction H;auto.  
+constructor. done. Admitted.
 
 Lemma ueqe_trans : forall e0 e1 e2, e0 =f= e1 -> e1 =f= e2 -> e0 =f=  e2.
 Proof. Admitted.
@@ -315,13 +673,5 @@ Definition ueqe_dec (e0 e1 : endpoint) := true.
 
 Lemma ueqeP e0 e1 : reflect (e0 =f= e1) (ueqe_dec e0 e1).
 Proof. Admitted.
+*)
 
-
-Fixpoint project_pred  (g : gType):=  
-match g with 
-| GMsg a u g0 => project_pred g0 
-| GBranch a gs => let S := ptcps g in 
-                 all (fun g' => all (fun p => ueqe_dec (project (nth GEnd gs 0) p) (project g' p)) (fresh S |` (S  `\` a))) gs && (all project_pred gs)
-| GRec _ g0 => project_pred g0
-| _ => true 
-end.

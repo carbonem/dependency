@@ -45,7 +45,7 @@ Instance CGoal_Hint `{H : CHint D} : CGoal D. destruct H. constructor. done. Def
 
 
 
-
+Check ptcps.
 
 
 Lemma notin_big : forall (p : ptcp) gs i, p \notin \bigcup_(j <- gs) (ptcps j) -> i < size gs -> p \notin ptcps (nth GEnd gs i).
