@@ -31,7 +31,7 @@ Module Substitution.
 Definition axiom_nop (T : eqType) (substitute : nat -> T -> T ->T) (fv : T -> {fset nat})  :=  forall t t0 i, i \notin fv t -> substitute i t t0 = t.
 
 Definition axiom_fv_subst (T : eqType) (substitute : nat -> T -> T ->T) (fv : T -> {fset nat}) :=  
-forall t t0 i, fv t0 = fset0 -> fv (substitute i t t0) = fv t `\ i . 
+forall t t0 i, fv (substitute i t t0) = if i \in fv t then fv t `\ i `|` fv t0 else fv t `\i. 
 
 Record mixin_of (T : eqType) := Mixin {substitute : nat -> T -> T -> T; fv : T -> {fset nat};
                                                         _ : axiom_nop substitute fv;
@@ -125,14 +125,43 @@ Qed.
 *)
 
 (*Add to recursion, unsound now*)
-Fixpoint gType_substitution (i : nat) g0 g1  :=
-match g0 with
-| GMsg a u g0' => GMsg a u (gType_substitution i g0' g1)
-| GBranch a gs => GBranch a (map (fun g0' => gType_substitution i g0' g1) gs)
-| GVar n => if n == i then g1 else g0
-| GRec n g0' => if n == i then g0 else GRec n (gType_substitution i g0' g1)
+Definition swap_aux (i i1 i2 : nat) := if i == i1 then i2 else if i == i2 then i1 else i.
+
+Fixpoint swap g i1 i2  :=
+match g with
+| GMsg a u g0' => GMsg a u (swap g0' i1 i2)
+| GBranch a gs => GBranch a (map (fun g0' => swap g0' i1 i2) gs)
+| GVar n => GVar (swap_aux n i1 i2)
+| GRec n g0' => GRec (swap_aux n i1 i2) (swap g0' i1 i2)
 | GEnd => GEnd
 end.
+From mathcomp Require Import finmap.
+Open Scope fset_scope.
+
+(*From metatheory*)
+  Lemma nat_list_max : forall (xs : list nat),
+    { n : nat | forall x, x \in xs -> x <=  n }.
+  Proof.
+    induction xs as [ | x xs [y H] ].
+    (* case: nil *)
+    exists (0). inversion 1.
+    (* case: cons x xs *) 
+    exists ((x + y)%nat). intros z J. move : J. rewrite inE. move/orP=>[]. move/eqP=>->. rewrite /=. lia. move/H. lia. 
+   Qed.
+
+ Lemma atom_fresh_for_list :
+    forall (xs : list nat), { n : nat | ~ n \in xs }.
+  Proof.
+    intros xs. destruct (nat_list_max xs) as [x H]. exists ( (x.+1)).
+    intros J. apply H in J. lia. 
+  Qed. 
+Definition fresh (S : seq nat) :=
+    match atom_fresh_for_list S with
+      (exist x _ ) => x
+    end.
+
+
+
 
 Fixpoint gType_fv (g : gType) :=
 match g with
@@ -142,6 +171,20 @@ match g with
 | GBranch _ gs => \bigcup_( i <- map gType_fv gs) i 
 | GRec n g0 => (gType_fv g0) `\ n
 end.
+
+
+Fixpoint gType_substitution (i : nat) g0 g1  :=
+match g0 with
+| GMsg a u g0' => GMsg a u (gType_substitution i g0' g1)
+| GBranch a gs => GBranch a (map (fun g0' => gType_substitution i g0' g1) gs)
+| GVar n => if n == i then g1 else g0
+| GRec n g0' => if n == i then g0 else if n \in (gType_fv g1) then 
+                                        let f := fresh (gType_fv g1 `|` gType_fv g0') in
+                                        GRec f (swap (gType_substitution i g0' g1) n f)
+                                        else  GRec n (gType_substitution i g0' g1)
+| GEnd => GEnd
+end.
+
 
 Fixpoint ptcps (g : gType) : {fset ptcp} := 
 match g with 
@@ -157,7 +200,7 @@ Canonical gType_predType := PredType (fun g p => p \in ptcps g).
 
 Lemma gType_axiom_nop : Substitution.axiom_nop gType_substitution gType_fv.
 Proof. elim;rewrite /=;try done;intros. move : H. rewrite !inE.  rewrite neg_sym. move/negbTE=>->. done. 
-move : H0. rewrite !inE. move/orP=>[]. intros. by  rewrite eq_sym a. rifliad. intros. f_equal. auto. f_equal. 
+move : H0. rewrite !inE.  move/orP=>[]. rewrite negb_involutive.  move/negbTE.  intros. by  rewrite eq_sym a. rifliad. intros. f_equal. auto. f_equal. 
 auto.
 f_equal. rewrite big_map in H0.  induction l. done. simpl. f_equal.  apply H.  rewrite !inE.  lia. move : H0. 
 rewrite big_cons. rewrite !inE. split_and. apply IHl. intros. apply H. rewrite !inE H1. lia. done. move : H0.  rewrite big_cons !inE. split_and. 

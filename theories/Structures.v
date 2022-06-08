@@ -103,7 +103,7 @@ Notation npred := notin_pred.
 Notation apred := action_pred.
 Notation spred := size_pred.
 Notation ppred := project_pred.
-
+Notation svpred := same_varsg.
 Definition rec_pred := [::apred;spred;ppred]. 
 
 Class CGPred (A : eqType) (p : pred A) := { _ : pred A }.
@@ -112,6 +112,7 @@ Instance apred_CGPred : CGPred apred. constructor. constructor. Qed.
 Instance spred_CGPred : CGPred spred. constructor. constructor. Qed.
 Instance ppred_CGPred : CGPred ppred. constructor. constructor. Qed.
 Instance npred_CGPred p : CGPred (npred p). constructor. constructor. Qed.
+Instance svpred_CGPred : CGPred svpred. constructor. constructor. Qed.
 
 
 Class CStructural (A : eqType) (p : pred A) (g0 g1 : A) := { cimp : p g0 -> p g1}. 
@@ -121,11 +122,14 @@ Instance  CStructural_apredr n g : CStructural apred (GRec n g) g. Proof. constr
 Instance  CStructural_spredr n g : CStructural spred (GRec n g) g. Proof. constructor. simpl. done. Qed.
 Instance  CStructural_ppredr n g : CStructural ppred (GRec n g) g. Proof. constructor. simpl. done. Qed.
 Instance  CStructural_npredr p n g : CStructural (npred p) (GRec n g) g. Proof. constructor. simpl. done. Qed.
+Instance  CStructural_svpredr n g : CStructural svpred (GRec n g) g. Proof. constructor. simpl. done. Qed.
 
 Instance  CStructural_apredm a u g : CStructural apred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
 Instance  CStructural_spredm a u g : CStructural spred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
 Instance  CStructural_ppredm a u g : CStructural ppred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
 Instance  CStructural_npredm p a u g : CStructural (npred p) (GMsg a u g) g. Proof. constructor.  rewrite /npred /= !inE. Locate inE.  Check inE.  split_and. Qed.
+Instance  CStructural_svpredm a u g : CStructural svpred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
+
 
 Instance  CStructural_apredb a gs g : {goal g \in gs} -> CStructural apred (GBranch a gs) g. 
 Proof. move=>[] H. constructor. simpl. split_and. apply (allP H2). done.  Qed.
@@ -137,6 +141,9 @@ Instance  CStructural_npredb p a gs g : {goal g \in gs} ->  CStructural (npred p
 Proof. move=>[] H. constructor. rewrite /npred /= big_map !inE. split_and. 
        move : H. move/nthP=>Hnth. specialize Hnth with GEnd. destruct Hnth. rewrite -H1. apply/notin_big. done. done. 
 Qed.
+Instance  CStructural_svpredb a gs g :  {goal g \in gs} -> CStructural svpred (GBranch a gs) g. 
+Proof. move=>[] H. constructor. simpl. split_and. apply (allP H2). done.  Qed.
+
 
 
 Lemma In_l_preds : forall (A : eqType) l (g : A) p, In p l -> lpreds l g ->  p g.
@@ -201,8 +208,8 @@ Qed.
 
 Instance traverse_size_pred_unf : forall g0 g1 i, {goal lpreds [::spred] g0} -> {goal lpreds [::spred] g1} -> {goal spred (g0[s g1//i])}.
 Proof.  intros.  constructor.  apply size_pred_subst.   destruct H. cc. destruct H0. cc. Qed.
-Print bound.
-Check @bound. Check CGPred.
+
+
 Instance bound_CGPred (A : substType) : CGPred (@bound A). repeat constructor. Qed.
 Check CStructural.
 Check bound.
@@ -230,12 +237,15 @@ Proof. move => [].  constructor. move : b. intros.  rewrite /bound. rewrite fv_s
 rs. rs_in b. by apply/eqP. Qed.
 
 
-
-(*Instance bounde_CGPred : CGPred bounde. repeat constructor. Qed.*)
-
-
 Instance CStructural_bounde_msg d a u g: CStructural bound (EMsg d a u g) g.
 constructor. rewrite  /=. done. Qed.
+
+
+
+
+
+
+
 
 Instance  CGoal_all_boundeb d a gs : {goal bound (EBranch d a gs)} -> {goal all bound gs}. 
 move => [] H. constructor.  simpl in H. move : H.  rewrite /bound. rs. rewrite big_map.  induction gs. rewrite big_nil. done. rewrite big_cons. rewrite /=. move/eqP=>HH. rewrite IHgs //=. split_and. 

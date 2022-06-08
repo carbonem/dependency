@@ -81,3 +81,5 @@ Ltac split_and := intros;repeat (match goal with
                    | [ |- is_true (_ && _) ] => apply/andP;split 
 
                   end);auto.
+
+Lemma negb_involutive : forall b, ~~ ~~ b = b. case;done. Qed.

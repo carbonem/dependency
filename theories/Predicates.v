@@ -208,30 +208,6 @@ Qed.*)
 
 Definition projmap  (S : fset_ptcp) (g : gType)  : env := [fmap p : S => project g (val p)].
 
-(*From metatheory*)
-Definition ptcp_le (p0 p1 : ptcp) := let: Ptcp n0 := p0 in let: Ptcp n1 := p1 in n0 <= n1.
-
-  Lemma nat_list_max : forall (xs : list ptcp),
-    { n : ptcp | forall x, x \in xs -> ptcp_le x  n }.
-  Proof.
-    induction xs as [ | x xs [y H] ].
-    (* case: nil *)
-    exists (Ptcp 0). inversion 1.
-    (* case: cons x xs *) destruct x,y.
-    exists (Ptcp (n + n0)%nat). intros z J. move : J. rewrite inE. move/orP=>[]. move/eqP=>->. rewrite /=. lia. move/H. rewrite /ptcp_le. destruct z.  lia. 
-   Qed.
-
- Lemma atom_fresh_for_list :
-    forall (xs : list ptcp), { n : ptcp | ~ n \in xs }.
-  Proof.
-    intros xs. destruct (nat_list_max xs) as [x H]. destruct x. exists (Ptcp (n.+1)).
-    intros J. rewrite /ptcp_le in H. apply H in J. lia. 
-  Qed. 
-Definition fresh (S : fset_ptcp) :=
-    match atom_fresh_for_list S with
-      (exist x _ ) => x
-    end.
-
 
 
 From Paco Require Import paco.
@@ -421,9 +397,10 @@ end.
 
 Definition act_of g :=
 match full_eunf g with 
-| EMsg _ a _ _ => Some a
-| EBranch _ a _ => Some a
-| _ => None
+| EMsg _ a _ _ => inr a
+| EBranch _ a _ => inr a
+| EVar n => inl (Some n)
+| _ => inl None
 end.
 
 Inductive bisimilar_f (r : endpoint -> endpoint -> Prop) : endpoint -> endpoint -> Prop :=
@@ -461,7 +438,7 @@ Fixpoint bisim_dec e0 e1 := bisim_dec_aux ((esize e0) * (esize e1)) nil e0 e1.
 Lemma bisimP : forall e0 e1, reflect (bisimilar e0 e1) (bisim_dec e0 e1). 
 Proof. Admitted.
 Lemma bisimP2 : forall e0 e1 R S, (forall e0 e1, R e0 e1 <-> (e0,e1) \in S ) -> exists n,  (bisimilar_f R e0 e1) <-> (bisim_dec_aux n S e0 e1). 
-Proof. Admitted.
+Proof. Admitted. 
 
 Fixpoint project_pred  (g : gType):=  
 match g with 
@@ -470,7 +447,8 @@ match g with
                  all (fun (g' : gType)  => 
                          all (fun p => bisim_dec (project (nth GEnd gs 0) p) (project g' p)) 
                          (fresh S |` (S `\` a )))
-                      gs
+                      gs 
+(*                 (all (fun (g : gType) => fv (nth GEnd gs 0) == fv g) gs)*)
                  && (all project_pred gs)
 | GRec _ g0 => project_pred g0
 | _ => true 
@@ -478,6 +456,21 @@ end.
 
 
 
+Fixpoint same_vars (e : endpoint ) :=
+match e with 
+| EBranch d c l => all (fun e' => fv (nth EEnd l 0) == fv e') l && (all same_vars l)
+| EMsg _ _ _ e0 => same_vars e0
+| ERec _ e0 => same_vars e0
+| _ => true 
+end.
+
+Fixpoint same_varsg (e : gType ) :=
+match e with 
+| GBranch c l => all (fun e' => fv (nth GEnd l 0) == fv e') l && (all same_varsg l)
+| GMsg _ _ e0 => same_varsg e0
+| GRec _ e0 => same_varsg e0
+| _ => true 
+end.
 
 
 
