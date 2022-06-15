@@ -3,7 +3,7 @@ From mathcomp Require Import all_ssreflect zify finmap.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-From Dep Require Import Global_Syntax Utils.
+From Dep Require Import NewSyntax  Utils.
 Open Scope fset_scope.
 Open Scope fmap_scope.
 
@@ -26,7 +26,8 @@ Let inE := (inE,ptcps_of_act_eq,Bool.negb_involutive,eqxx,negb_or,negb_and).
 Definition env := {fmap ptcp -> endpoint}.  
 Definition fset_ptcp := {fset ptcp}.
 
-Module Substitution.
+
+(*Module Substitution.
 
 Definition axiom_nop (T : eqType) (substitute : nat -> T -> T ->T) (fv : T -> {fset nat})  :=  forall t t0 i, i \notin fv t -> substitute i t t0 = t.
 
@@ -57,7 +58,7 @@ Lemma subst_nop ( A: substType) : Substitution.axiom_nop (@substitute A) (@fv A)
 Proof.  destruct A. destruct class. done. Qed.
 
 Lemma fv_subst ( A: substType) : Substitution.axiom_fv_subst (@substitute A) (@fv A). 
-Proof.  destruct A. destruct class. done. Qed.
+Proof.  destruct A. destruct class. done. Qed.*)
 
 
 (*
@@ -124,21 +125,8 @@ Qed.
 
 *)
 
-(*Add to recursion, unsound now*)
-Definition swap_aux (i i1 i2 : nat) := if i == i1 then i2 else if i == i2 then i1 else i.
 
-Fixpoint swap g i1 i2  :=
-match g with
-| GMsg a u g0' => GMsg a u (swap g0' i1 i2)
-| GBranch a gs => GBranch a (map (fun g0' => swap g0' i1 i2) gs)
-| GVar n => GVar (swap_aux n i1 i2)
-| GRec n g0' => GRec (swap_aux n i1 i2) (swap g0' i1 i2)
-| GEnd => GEnd
-end.
-From mathcomp Require Import finmap.
-Open Scope fset_scope.
-
-(*From metatheory*)
+(*(*From metatheory*)
   Lemma nat_list_max : forall (xs : list nat),
     { n : nat | forall x, x \in xs -> x <=  n }.
   Proof.
@@ -159,8 +147,42 @@ Definition fresh (S : seq nat) :=
     match atom_fresh_for_list S with
       (exist x _ ) => x
     end.
+*)
+
+(*Print predn.
 
 
+
+Fixpoint shift (g : gType) := 
+match g with
+| GMsg a u g0' => GMsg a u (shift g0')
+| GBranch a gs => GBranch a (map (fun g0' => shift g0') gs)
+| GVar n => GVar (n.+1)
+| GRec g0' => GRec (shift g0') 
+| GEnd => GEnd
+end.
+
+
+
+Fixpoint gType_substitution (i : nat) g0 g1  :=
+match g0 with
+| GMsg a u g0' => GMsg a u (gType_substitution i g0' g1)
+| GBranch a gs => GBranch a (map (fun g0' => gType_substitution i g0' g1) gs)
+| GVar n => if n == i then g1 else g0
+| GRec g0' => GRec (gType_substitution i.+1 g0' (shift g1))
+| GEnd => GEnd
+end.
+*)
+
+Fixpoint ptcps (g : gType) : {fset ptcp} := 
+match g with 
+| GMsg a _ g0 => a `|`(ptcps g0)
+| GBranch a gs => a `|` \bigcup_( i <- map ptcps gs) i
+| GRec g0 => ptcps g0
+| _ => fset0
+end.
+
+Canonical gType_predType := PredType (fun g p => p \in ptcps g). 
 
 
 Fixpoint gType_fv (g : gType) :=
@@ -169,42 +191,27 @@ match g with
 | GEnd => fset0
 | GMsg _ _ g0 => gType_fv g0
 | GBranch _ gs => \bigcup_( i <- map gType_fv gs) i 
-| GRec n g0 => (gType_fv g0) `\ n
+| GRec g0 => [fset n.-1 | n in (gType_fv g0) & n != 0]
+end. 
+
+
+Fixpoint endpoint_fv (e : endpoint) :=
+match e with
+| EVar j => [fset j]
+| EEnd => fset0
+| EMsg _ _ _ g0 => endpoint_fv g0
+| EBranch _ _ gs => \bigcup_( i <- map endpoint_fv gs) i 
+| ERec g0 => [fset n.-1 | n in (endpoint_fv g0) & n != 0 ] (*[fset E | x in p & P]*)
 end.
 
 
-Fixpoint gType_substitution (i : nat) g0 g1  :=
-match g0 with
-| GMsg a u g0' => GMsg a u (gType_substitution i g0' g1)
-| GBranch a gs => GBranch a (map (fun g0' => gType_substitution i g0' g1) gs)
-| GVar n => if n == i then g1 else g0
-| GRec n g0' => if n == i then g0 else if n \in (gType_fv g1) then 
-                                        let f := fresh (gType_fv g1 `|` gType_fv g0') in
-                                        GRec f (swap (gType_substitution i g0' g1) n f)
-                                        else  GRec n (gType_substitution i g0' g1)
-| GEnd => GEnd
-end.
-
-
-Fixpoint ptcps (g : gType) : {fset ptcp} := 
-match g with 
-| GMsg a _ g0 => a `|`(ptcps g0)
-| GBranch a gs => a `|` \bigcup_( i <- map ptcps gs) i
-| GRec n g0 => ptcps g0
-| _ => fset0
-end.
-
-Canonical gType_predType := PredType (fun g p => p \in ptcps g). 
-
-
-
-Lemma gType_axiom_nop : Substitution.axiom_nop gType_substitution gType_fv.
+(*Lemma gType_axiom_nop : Substitution.axiom_nop subst_gType gType_fv.
 Proof. elim;rewrite /=;try done;intros. move : H. rewrite !inE.  rewrite neg_sym. move/negbTE=>->. done. 
-move : H0. rewrite !inE.  move/orP=>[]. rewrite negb_involutive.  move/negbTE.  intros. by  rewrite eq_sym a. rifliad. intros. f_equal. auto. f_equal. 
+f_equal. move : H0. Search _ (_ @` _). rewrite !inE.  move/orP=>[]. rewrite negb_involutive.  move/negbTE.  intros. by  rewrite eq_sym a. rifliad. intros. f_equal. auto. f_equal. 
 auto.
 f_equal. rewrite big_map in H0.  induction l. done. simpl. f_equal.  apply H.  rewrite !inE.  lia. move : H0. 
 rewrite big_cons. rewrite !inE. split_and. apply IHl. intros. apply H. rewrite !inE H1. lia. done. move : H0.  rewrite big_cons !inE. split_and. 
-Qed.
+Qed.*)
 
 Lemma big_exists : forall (A : eqType) (B : choiceType) (l : seq A) (f0 : A -> {fset B}) p, p \in \bigcup_(j <- l) (f0 j) = has (fun x => p \in f0 x) l. 
 Proof. 
@@ -231,7 +238,7 @@ Qed.
 
 
 
-Lemma gType_axiom_fv_subst : Substitution.axiom_fv_subst gType_substitution gType_fv.
+(*Lemma gType_axiom_fv_subst : Substitution.axiom_fv_subst gType_substitution gType_fv.
 Proof. 
 elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
 - rifliad. rewrite (eqP H0). move : H.  move=>->. rewrite !inE. lia. 
@@ -245,7 +252,7 @@ elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
 Qed.
 
 Definition gType_substMixin := Substitution.Mixin  gType_axiom_nop gType_axiom_fv_subst.
-Canonical gType_substType := @Substitution.Pack _ gType_substMixin.
+Canonical gType_substType := @Substitution.Pack _ gType_substMixin.*)
 
 
 
@@ -259,7 +266,7 @@ Ltac fsetPtac := let k := fresh "k" in apply/fsetP=>k;rewrite ?inE;try lia.
 
 
 
-Fixpoint endpoint_substitution (i : nat) g0 g1  :=
+(*Fixpoint endpoint_substitution (i : nat) g0 g1  :=
 match g0 with
 | EMsg d a u g0' => EMsg d a u (endpoint_substitution i g0' g1)
 | EBranch d a gs => EBranch d a (map (fun g0' => endpoint_substitution i g0' g1) gs)
@@ -345,7 +352,7 @@ Proof. elim;rewrite /=;intros; rewrite /=.
   rewrite (big_f_eq HH) big_if !inE -big_exists. 
 
   rifliad. rewrite fsetUA. done. rewrite fsetUA. fsetPtac. 
-Qed.
+Qed.*)
 
 
 
@@ -397,16 +404,16 @@ match g with
 end.*)
 
 
-(*Fixpoint mu_height g :=
+Fixpoint mu_height g :=
 match g with
-| GRec n g0 => (mu_height g0).+1
+| GRec g0 => (mu_height g0).+1
 | _ => 0
-end.*)
+end.
 
-(*Definition unf g := if g is GRec n g' then (substitution n g' g) else g.
+Definition unf g := if g is GRec g' then g' [g g.:var]  else g.
 
 Open Scope fset_scope.
-Open Scope fmap_scope.*)
+Open Scope fmap_scope.
 
 
 
@@ -430,79 +437,286 @@ Proof. case. intros. rewrite //=.  rewrite /ptcps_of_act //= !inE eqxx. lia. Qed
 
 
 
-(*Notation negb_invol :=  Bool.negb_involutive.*)
+Notation negb_invol :=  Bool.negb_involutive.
 
 
 
 
 
 
-(*Lemma n_fset0 (n : nat) : [fset n] == fset0 = false.
+Lemma n_fset0 (n : nat) : [fset n] == fset0 = false.
 Proof. destruct (  ([fset n] == fset0)) eqn:Heqn.  move : Heqn. move/eqP/fsetP=>H. have : n \in [fset n] = false. by rewrite H !inE. 
 rewrite !inE.  done. done.
-Qed.*)
+Qed.
 
 
-(*Lemma mu_height_subst : forall g0 g1  i, guarded i g0 -> contractive g0 -> mu_height (g0[g g1//i]) = mu_height g0.
+Fixpoint contractive_i (d : nat) g :=
+match g with 
+| GEnd => true
+| GMsg _ _ g0 => contractive_i 0 g0
+| GBranch _ gs => all (contractive_i 0) gs
+| GRec g0 => contractive_i (S d) g0
+| GVar n => d <= n
+end. 
+
+Fixpoint bound_i (i : nat) g  := 
+match g with 
+| GEnd => true
+| GMsg _ _ g0 => bound_i i g0
+| GBranch _ gs => all (bound_i i) gs
+| GRec g0 => bound_i (S i) g0
+| GVar n => n < i
+end.
+
+Lemma mu_height_subst : forall g0 i sigma, bound_i i.+1 g0 -> contractive_i i.+1 g0 -> mu_height (g0[g sigma]) = mu_height g0.
 Proof. 
 elim; try solve [by rewrite /=].
-- rewrite /=. intros. split_and. rewrite (negbTE H). done. 
-- intros. simpl. simpl in H0. split_and. destruct (i == n) eqn:Heqn.  rewrite eq_sym Heqn. done.  
-  simpl in H1. rifliad. split_and. simpl. f_equal. apply H.  done. done. 
-Qed.*)
-
-
-
-
-(*Lemma bound_subst : forall (g g': gType) i, fv_g g = [fset i] -> bound g' -> bound (substitution i g g').
-Proof. intros. move : H0. rewrite /bound. move/eqP=>HH. rewrite -HH. apply/eqP.  rewrite fv_g_subst. rewrite H HH. apply/fsetP=>k. rewrite !inE. destruct (eqVneq k i);done.  rewrite /bound. by apply/eqP.
+- rewrite /=. intros. lia. 
+- intros. simpl. f_equal. apply : H. eauto. eauto. 
 Qed.
 
-Lemma notin_guarded : forall g n, n \notin fv_g g  -> guarded n g.
-Proof. elim;rewrite /bound //=;intros. move : H. rewrite !inE. lia. move : H0. rewrite !inE. move/orP=>[]. lia. intros.  
-rewrite H //=. lia. 
+
+
+Lemma bound_lt : forall (g : gType) i j, i < j -> bound_i i g -> bound_i j g.
+Proof. 
+elim.
+- rewrite /=;auto. move=>n i j.  move=> /leP H /ltP H1. apply/ltP.  lia. 
+- rewrite /=;auto. intros. apply : (@H i.+1 j.+1); done. 
+- rewrite /=;auto. 
+- intros. move : (allP H1) => H2. apply/allP.  move=> Hin H4. apply H2 in H4 as H5. apply : (H _ _ _ _ H0).
+  done.
+- intros. apply (allP H1). done. 
 Qed.
 
-Lemma bound_notin : forall g n, bound g -> n \notin fv_g g.
-Proof. intros. rewrite /bound in H. rewrite (eqP H) !inE. done. Qed.
-Lemma bound_guarded : forall g n, bound g  -> guarded n g.
-Proof. intros. apply notin_guarded. apply bound_notin. done. Qed.
+Lemma bound_le : forall (g : gType) i j, i <= j -> bound_i i g -> bound_i j g.
+Proof. 
+intros. destruct (j == i) eqn:Heqn. rewrite (eqP Heqn). done. apply/bound_lt. 2 : {  eauto. } lia.
+Qed.
 
-Lemma guarded_subst : forall g g' n i, guarded n g -> bound g' -> guarded n (g)[g g' // i].
-Proof. elim;rewrite /=;intros. rifliad. apply bound_guarded. done. all:auto. 
-rifliad. simpl. destruct (orP H0). by rewrite H3.  rewrite H //=. lia.
-Qed.*)
+Lemma bound_fv1 : forall g i, bound_i i g -> (forall v, v \in gType_fv g -> v < i).
+Proof. 
+elim;rewrite /=;intros.
+rewrite !inE in H0. rewrite (eqP H0). done.
+rewrite !inE in H0. done.
+move : H1. move/imfsetP=>[]. simpl. move => x. rewrite !inE. split_and. subst. 
+suff : x < i.+1. lia. apply H. done. done.
+apply H. done. done.  move : H1. rewrite big_map big_exists. move/hasP=>[]. intros.  apply : H. eauto. 
+apply (allP H0).  done. done.
+Qed.
 
-
-
-
-
-
-(*Lemma contractive_subst : forall (g g': gType) i, (*i \in fv_g g ->*) contractive g -> contractive g' -> bound g' -> contractive (substitution i g g').
+Lemma bound_fv2 : forall g i, (forall v, v \in gType_fv g -> v < i) ->  bound_i i g.
 Proof.
-elim;  (try solve [rewrite /= ;auto]).
+elim;rewrite /=;intros. apply H. rewrite !inE //=. done.
+apply H.  intros. 
+destruct (eqVneq v 0).  subst.  done.
+suff : v.-1 < i. lia. apply H0. 
+apply/imfsetP. exists v. simpl. rewrite !inE /=. split_and. all: try done. 
+apply H. auto. apply/allP. intro. intros. apply H.  done.  intros.  apply H0. rewrite big_map big_exists.
+apply/hasP. exists x. done.  done. 
+Qed.
+
+Lemma bound_fv : forall g i, bound_i i g <-> (forall v, v \in gType_fv g -> v < i).
+Proof. 
+intros. split;intros.  apply : bound_fv1; eauto. 
+apply : bound_fv2; eauto. 
+Qed.
+
+(*Lemma fv_ren : forall g sigma v,  v \in gType_fv g ->  sigma v \in gType_fv g ⟨g sigma ⟩. 
+Proof.
+elim;rewrite /=;intros;try done. 
+move : H. rewrite !inE. move/eqP. move=>->. done.
+move : H0.  move/imfsetP=>[] x. simpl. rewrite !inE. split_and. subst. 
+apply/imfsetP. exists x. simpl. rewrite !inE. split_and.  asimpl. 
+destruct x.  done. simpl. *)
+
+
+
+
+(*Lemma bound_i_shift : forall g i,  bound_i i g -> bound_i i.+1 g  ⟨g shift⟩.
+Proof.
+move => g i.  rewrite !bound_fv. intros.
+destruct v.  done. 
+suff : v  < i. lia. apply : H. apply : fv_shift. 2 : {  apply : H0. }
+intro.  intros. inversion H.  done. 
+Qed.
+*)
+Fixpoint guarded i g := 
+match g with
+| GVar j => j != i
+| GEnd => true
+| GMsg _ _ g0 => true
+| GBranch _ gs => true
+| GRec g0 => guarded i.+1 g0
+end. 
+
+Fixpoint contractive2 g := 
+match g with
+| GVar j => true
+| GEnd => true
+| GMsg _ _ g0 => contractive2 g0
+| GBranch _ gs => all contractive2 gs
+| GRec g0 => (guarded 0 g0) && (contractive2 g0)
+end. 
+
+(*Print gType_fv.
+Open Scope nat_scope.
+Fixpoint cont_fv (g : gType) :=
+match g with
+| GVar j => [fset (j,0)]
+| GEnd => fset0
+| GMsg _ _ g0 => [fset (n.1,0) | n in (cont_fv g0)]
+| GBranch _ gs => [fset (n.1,0)| n in (\bigcup_( i <- map cont_fv gs) i)]
+| GRec g0 => [fset ((n.1),(n.2)+1) | n in (cont_fv g0)]
+end. *)
+
+
+
+Lemma contractive_lt : forall (g : gType) i j, j < i -> contractive_i i g -> contractive_i j g.
+Proof.
+elim.
+- rewrite /=. intros. lia. 
+- rewrite /=. done. 
+- rewrite /=.  intros. apply : (H i.+1 j.+1). done. done.
+- rewrite /=.  intros. done. 
+- rewrite /=. intros. done. 
+Qed.
+
+Lemma contractive_le : forall (g : gType) i j, j <= i -> contractive_i i g -> contractive_i j g.
+Proof.
+intros. destruct (j == i) eqn:Heqn. rewrite (eqP Heqn). done. apply/contractive_lt. 2 : {  eauto. } lia.
+
+Qed.
+
+
+
+
+(*Lemma cont_fv_lem1 : forall g i, contractive_i i g -> (forall v, v \in cont_fv g -> v.2 + i <= v.1).
+Proof.
+elim;simpl;try done;intros;asimpl.
+rewrite !inE in H0. move : (eqP H0). destruct v. case. intros.  subst.  simpl . lia.
+move : H1.  move/imfsetP=>[] /=x. intros.  destruct v. inversion q. subst. clear q.
+simpl. eapply H in H0. 2 : { eauto. } lia. 
+move : H1.  move/imfsetP=>[] /=x. intros.  
+apply 
+destruct v. inversion q. subst. clear H1.
+simpl. eapply H in H0. 2 : { eauto. }  lia.
+apply H.  apply/contractive_le. 2 :  eauto.  lia. move : H1. 
+clear q. 
+move => g i.  rewrite !bound_fv. intros.
+destruct v.  done. 
+suff : v  < i. lia. apply : H. apply : fv_shift. 2 : {  apply : H0. }
+intro.  intros. inversion H.  done. 
+Qed.*)
+
+
+
+
+
+(*Lemma bound_subst : forall (g : gType) i sigma, bound_i i.+1 g -> (forall n, n < i.+1 -> bound_i i (sigma n)) ->  bound_i i (g[g sigma]).
+Proof. 
+elim;rewrite /=;simpl;intros;try done.
+apply H0. done. asimpl. apply : H. done. 
+intros. destruct n. simpl. done. simpl. apply/bound_i_shift. apply : H1. lia. 
+apply H.  done.  done. 
+rewrite all_map. apply/allP. intro. intros.  simpl. apply : H. done.  apply (allP H0).  done.
+done. 
+Qed.
+
+Lemma contractive_ren : forall g j sigma, (forall n, n <= sigma n) ->  contractive_i j g -> contractive_i j g ⟨g sigma ⟩.
+Proof.
+elim;intros;simpl.
+simpl in H0. specialize H with n. lia. done.  asimpl. apply H.  intros. 
+destruct n. done. simpl. asimpl. specialize H0 with n. lia.
+done. simpl in H1. apply H.  auto. done.
+rewrite all_map. apply/allP. intro. intros. simpl. apply H. done. auto. simpl in H1.  apply (allP H1).  done.
+Qed.
+*)
+(*Lemma bound_contractive_subst : forall (g g': gType U) i j, bound_i (S i) g -> contractive_i j g -> bound g' -> (forall j, contractive_i j g') -> 
+contractive_i j (substitution i g g').
+Proof.
+elim. 
+- rewrite /=. done.
 - rewrite/=. move => v g' i j. case : (eqVneq v i).  done. simpl. done.
-- intros. rewrite /=. rifliad. simpl. split_and. simpl in H1. split_and. apply guarded_subst. simpl in H0. split_and. done.  apply H. simpl in H0. move : H0. split_and. done. done. 
-- rewrite /=. intros. move : H0. intros. rewrite all_map. apply/allP=> l' Hin. simpl. apply H;auto.  
-  apply (allP H0). done. 
+- rewrite /=. intros. apply H. done. done. done. done. 
+- rewrite /=. intros. apply/allP. move=> gsub Hin. move : (mapP Hin). case. 
+intros. subst. apply H. by apply/InP. move : (allP H0). 
+move => H4. apply H4 in p. done. move : (allP H1). move => H4. apply H4 in p. done. done. 
+  intros. done.
+- rewrite /=. intros. 
+apply H. done. done. done. done. 
+- rewrite /=. intros.  apply/andP. move : (andP H1) (andP H2)=> [] + +[]. intros. split; auto. 
 Qed.
+*)
 
-Lemma bound_contractive_subst : forall g0 g1 i, fv_g g0 = [fset i] -> bound g1 ->   contractive g0 -> contractive g1 ->  bound (g0[g g1//i]) && contractive (g0[g g1//i]).
-Proof.
-intros.  split_and. apply bound_subst;auto. apply contractive_subst;auto.  
+
+
+(*Lemma contractive2_subst : forall (g : gType) sigma, contractive2 g -> 
+(forall n, contractive2 (sigma n) ) -> contractive2 (g[g sigma]).
+Proof. 
+elim;rewrite /=;simpl;intros;try done.
+split_and. asimpl. apply/guarded_subst. done. 
+intros.
+apply/guarded_shift2.
+  destruct n.  done. simpl.  rewrite /funcomp. apply/guarded_shift2.
+intros. destruct n0. done. done.
+
+
+ eapply guarded_shift in H2. move : (@guarded_shift _ _ _ _ H2).  apply/guarded_shift.
+
+apply H2. done. 
+asimpl. apply :H.  eauto. eauto. intros. destruct n. done.
+rewrite /funcomp. 
+apply/bound_i_shift. apply : H2. lia. 
+intros.  destruct n.  simpl. done.
+simpl. rewrite /funcomp. apply/contractive_ren. auto.  apply H3. 
+
+ edestruct H2.  eauto. 
+simpl. 
+
+apply/contractive_ren. auto. 
+
+destruct (j0 == n.+1)eqn:Heqn. 
+move : (eqP Heqn)=>HH. subst.c
+  admit. lia.
+apply : H. eauto.  done.  auto.  auto. 
+rewrite all_map. apply/allP. intro. intros. simpl. apply : H.  done.  apply (allP H0). done.
+apply (allP H1). done. a*)
+
+(*Lemma contractive_subst : forall (g : gType) i j sigma, bound_i i.+1 g -> contractive_i j g -> 
+(forall n, n < i.+1 -> bound_i i (sigma n) ) -> (forall  n j, j <= n -> contractive_i j (sigma n)) ->   contractive_i j (g[g sigma]).
+Proof. 
+elim;rewrite /=;simpl;intros;try done.
+apply H2. done. 
+asimpl. apply :H.  eauto. eauto. intros. destruct n. done.
+rewrite /funcomp. 
+apply/bound_i_shift. apply : H2. lia. 
+intros.  destruct n.  simpl. done.
+simpl. rewrite /funcomp. apply/contractive_ren. auto.  apply H3. 
+
+ edestruct H2.  eauto. 
+simpl. 
+
+apply/contractive_ren. auto. 
+
+destruct (j0 == n.+1)eqn:Heqn. 
+move : (eqP Heqn)=>HH. subst.c
+  admit. lia.
+apply : H. eauto.  done.  auto.  auto. 
+rewrite all_map. apply/allP. intro. intros. simpl. apply : H.  done.  apply (allP H0). done.
+apply (allP H1). done. auto.  auto. 
 Qed.
+*)
+
+Notation gt_pred g := (bound_i 0 g && contractive_i 0 g). 
 
 
-Notation gt_pred g := (bound g && contractive g). 
 
 
-
-
-Lemma unf_pred : forall (g : gType), gt_pred  g -> gt_pred (unf g).
+(*Lemma unf_pred : forall (g : gType), gt_pred  g -> gt_pred (unf g).
 Proof.
 intros. rewrite /unf. destruct g. move : (andP H)=>[];intros.  apply/andP. split. simpl. simpl in a. lia. simpl in *. lia. 
 - done.
-- simpl in *. split_and. destruct (n \notin (fv_g g)) eqn:Heqn.  rewrite subst_nop //=.  move : H0.  rewrite /bound /=. rewrite /=.
+- simpl in *. split_and. apply/bound_subst. done. intros. destruct n. done. done. destruct (n \notin (fv_g g)) eqn:Heqn.  rewrite subst_nop //=.  move : H0.  rewrite /bound /=. rewrite /=.
   rewrite mem_fsetD1 //=.  apply bound_subst. move : H0. rewrite /bound. simpl. intros. apply/fsetP=>k. rewrite !inE. 
   destruct  (eqVneq k n). subst. have : n \in fv_g g. lia. done. have : false = (k \in fset0).  done. move=>->. move : H0. move/eqP/fsetP=>H0. rewrite -H0. rewrite !inE i /=. done. 
   done. apply contractive_subst.  done. simpl. split_and. done. split_and. split_and. 
@@ -534,8 +748,58 @@ Proof.
 intros. simpl in *. apply (mu_height_iter_unf k) in H. move : H. 
 have : mu_height sg - k  = 0 by lia. move=>->. intros. destruct ((iter k (fun g => unf g) sg));try done.
 Qed.
+*)
+Definition full_unf g := (iter (mu_height g) (fun g' => unf g') g).
 
-Notation full_unf g := (iter (mu_height g) (fun g' => unf g') g).*)
+
+
+(*Lemma contractive_subst : forall g sigma j, (forall n, sigma n = var n \/  contractive_i j (sigma n)) ->  contractive_i j g -> contractive_i j g[g sigma].
+Proof.
+elim;rewrite /=;intros;try done.
+edestruct H.  rewrite H1. simpl. lia. eauto. eauto. 
+asimpl. apply : H. eauto. intros. destruct n. simpl.  auto. simpl. 
+edestruct H0. 
+rewrite /funcomp H. asimpl. auto. 
+right. 
+intros. simpl.  asimpl. apply contractive_ren. auto. auto.  eauto. 
+apply : H.   eauto. auto. auto.   
+rewrite all_map. apply/allP. intro. intros. simpl. apply/H. done. auto. apply (allP H1).  done.
+Qed.*)
+
+
+
+(*Lemma bound_notin : forall g n, bound g -> n \notin fv_g g.
+Proof. intros. rewrite /bound in H. rewrite (eqP H) !inE. done. Qed.
+Lemma bound_guarded : forall g n, bound g  -> guarded n g.
+Proof. intros. apply notin_guarded. apply bound_notin. done. Qed.
+
+Lemma guarded_subst : forall g g' n i, guarded n g -> bound g' -> guarded n (g)[g g' // i].
+Proof. elim;rewrite /=;intros. rifliad. apply bound_guarded. done. all:auto. 
+rifliad. simpl. destruct (orP H0). by rewrite H3.  rewrite H //=. lia.
+Qed.*)
+
+
+
+
+
+
+(*Lemma contractive_subst : forall (g g': gType) i, (*i \in fv_g g ->*) contractive g -> contractive g' -> bound g' -> contractive (substitution i g g').
+Proof.
+elim;  (try solve [rewrite /= ;auto]).
+- rewrite/=. move => v g' i j. case : (eqVneq v i).  done. simpl. done.
+- intros. rewrite /=. rifliad. simpl. split_and. simpl in H1. split_and. apply guarded_subst. simpl in H0. split_and. done.  apply H. simpl in H0. move : H0. split_and. done. done. 
+- rewrite /=. intros. move : H0. intros. rewrite all_map. apply/allP=> l' Hin. simpl. apply H;auto.  
+  apply (allP H0). done. 
+Qed.
+
+Lemma bound_contractive_subst : forall g0 g1 i, fv_g g0 = [fset i] -> bound g1 ->   contractive g0 -> contractive g1 ->  bound (g0[g g1//i]) && contractive (g0[g g1//i]).
+Proof.
+intros.  split_and. apply bound_subst;auto. apply contractive_subst;auto.  
+Qed.*)
+
+
+
+
 
 
 (*Endpoint type*)
@@ -758,3 +1022,146 @@ elim;rewrite /=;intros;apply/fsetP=>k;rewrite !inE.
 Qed.
 
 *)
+
+
+Fixpoint act_of g :=
+match g  with 
+| EMsg _ a _ _ => Some a
+| EBranch _ a _ => Some a
+| ERec g0 => act_of g0 
+| _ => None
+end.
+
+Fixpoint next_aux sigma e :=
+match e with 
+| EMsg _ _ _ e0 => [::e0[e sigma]]
+| EBranch _ _ es => map (fun e => e[e sigma]) es
+| ERec e0 => next_aux (e.:sigma) e0
+| EVar n => [::sigma n ]
+| EEnd => nil
+end.
+
+Definition next e := next_aux ids e.
+(*Parameter (c : ch).
+Definition g' := (ERec (EBranch Sd c ([::EVar 0;EVar 1]))).
+Definition g := (ERec g'). 
+
+Lemma test : (next_aux ids g) = [::g';g]. done. Qed.
+*)
+
+
+Inductive bisimilar_f (r : endpoint -> endpoint -> Prop) : endpoint -> endpoint -> Prop :=
+ BF e0 e1 : act_of e0 = act_of e1 -> size (next e0) = size (next e1) -> Forall (fun p => r p.1 p.2) (zip (next e0) (next e1)) ->  bisimilar_f r e0 e1.
+
+Require Import Paco.paco.
+Lemma mono_bisim : monotone2 bisimilar_f.
+Proof.
+move => x. intros. induction IN. constructor. done. done.
+apply/forallzipP. done. intros. move : H1. move/forallzipP=>Hzip. 
+simpl in Hzip.  simpl. apply LE. apply : Hzip. done. done. 
+Grab Existential Variables. all : repeat constructor.
+Qed. 
+
+Hint Resolve mono_bisim : paco.
+
+Definition bisimilar e0 e1  : Prop := paco2 bisimilar_f bot2 e0 e1.
+
+Fixpoint bisim_dec_aux n S e0 e1 :=
+if n is n'.+1 then ((e0,e1) \in S) || (act_of e0 == act_of e1) && (size (next e0) == size (next e1)) && 
+all (fun p => bisim_dec_aux n' ((e0,e1)::S) p.1 p.2) (zip (next e0) (next e1))
+else (e0,e1) \in S.
+Open Scope nat_scope.
+
+Fixpoint esize e := 
+match e with 
+| EMsg _ _ _ e0 => (esize e0).+1
+| EBranch _ _ es => foldr (fun e0 acc => (esize e0) + acc ) 0 es
+| ERec  e0 => (esize e0).+1
+| _ => 1
+end.
+
+Fixpoint bisim_dec e0 e1 := bisim_dec_aux ((esize e0) * (esize e1)) nil e0 e1.
+
+Lemma bisimP : forall e0 e1, reflect (bisimilar e0 e1) (bisim_dec e0 e1). 
+Proof. Admitted.
+Lemma bisimP2 : forall e0 e1 R S, (forall e0 e1, R e0 e1 <-> (e0,e1) \in S ) -> exists n,  (bisimilar_f R e0 e1) <-> (bisim_dec_aux n S e0 e1). 
+Proof. Admitted. 
+
+
+Fixpoint l_to_sig l := if l is x::l' then x.:(l_to_sig l') else ids.
+
+Fixpoint gunf l g := 
+match g with 
+| GRec g0 => gunf (g::l) g0
+| _ => g[g l_to_sig l]
+end.
+
+
+
+Definition act_ofg_aux g :=
+match g  with 
+| GMsg a u _ => Some (inl (a,Some u))
+| GBranch a _ => Some (inl (a,None))
+| GVar n => Some (inr n)
+| _ => None
+end.
+
+Definition act_ofg g := act_ofg_aux (full_unf g).
+
+
+Definition nextg_aux g :=
+match g with 
+| GMsg _ _ g0 => [::g0]
+| GBranch  _ es => es
+| _ => nil
+end.
+
+Definition nextg g := nextg_aux (full_unf g).
+
+
+
+(*Parameter (c : ch).
+Definition g' := (ERec (EBranch Sd c ([::EVar 0;EVar 1]))).
+Definition g := (ERec g'). 
+
+Lemma test : (next_aux ids g) = [::g';g]. done. Qed.
+*)
+
+
+Inductive bisimilar_fg (r : gType-> gType -> Prop) : gType -> gType -> Prop :=
+ BFr e0 e1 : act_ofg e0 = act_ofg e1 -> size (nextg e0) = size (nextg e1) -> Forall (fun p => r p.1 p.2) (zip (nextg e0) (nextg e1)) ->  bisimilar_fg r e0 e1.
+
+
+Lemma mono_bisimg : monotone2 bisimilar_fg.
+Proof.
+move => x. intros. induction IN. constructor. done. done.
+apply/forallzipP. done. intros. move : H1. move/forallzipP=>Hzip. 
+simpl in Hzip.  simpl. apply LE. apply : Hzip. done. done. 
+Grab Existential Variables. all : repeat constructor.
+Qed. 
+
+Hint Resolve mono_bisimg : paco.
+
+Definition bisimilarg e0 e1  : Prop := paco2 bisimilar_fg bot2 e0 e1.
+
+Fixpoint bisim_decg_aux n S e0 e1 :=
+if n is n'.+1 then ((e0,e1) \in S) || (act_ofg e0 == act_ofg e1) && (size (nextg e0) == size (nextg e1)) && 
+all (fun p => bisim_decg_aux n' ((e0,e1)::S) p.1 p.2) (zip (nextg e0) (nextg e1))
+else (e0,e1) \in S.
+Open Scope nat_scope.
+
+Fixpoint gsize e := 
+match e with 
+| GMsg  _ _ e0 => (gsize e0).+1
+| GBranch _ es => foldr (fun e0 acc => (gsize e0) + acc ) 0 es
+| GRec  e0 => (gsize e0).+1
+| _ => 1
+end.
+
+Fixpoint bisim_decg e0 e1 := bisim_decg_aux ((gsize e0) * (gsize e1)) nil e0 e1.
+
+Lemma bisimPg : forall e0 e1, reflect (bisimilarg e0 e1) (bisim_decg e0 e1). 
+Proof. Admitted.
+Lemma bisimP2g : forall e0 e1 R S, (forall e0 e1, R e0 e1 <-> (e0,e1) \in S ) -> exists n,  (bisimilar_fg R e0 e1) <-> (bisim_decg_aux n S e0 e1). 
+Proof. Admitted. 
+

@@ -5,7 +5,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-From Dep Require Import Global_Syntax Inductive_Linearity Substitutions Predicates.
+From Dep Require Import NewSyntax Inductive_Linearity Substitutions Predicates.
 Let inE := Predicates.inE.
 
 
@@ -118,16 +118,16 @@ Instance svpred_CGPred : CGPred svpred. constructor. constructor. Qed.
 Class CStructural (A : eqType) (p : pred A) (g0 g1 : A) := { cimp : p g0 -> p g1}. 
 Instance  CStructural_overlap (A : eqType) p (g : A) : CStructural p g g. Proof. constructor. done. Qed.
 
-Instance  CStructural_apredr n g : CStructural apred (GRec n g) g. Proof. constructor. simpl. done. Qed.
-Instance  CStructural_spredr n g : CStructural spred (GRec n g) g. Proof. constructor. simpl. done. Qed.
-Instance  CStructural_ppredr n g : CStructural ppred (GRec n g) g. Proof. constructor. simpl. done. Qed.
-Instance  CStructural_npredr p n g : CStructural (npred p) (GRec n g) g. Proof. constructor. simpl. done. Qed.
-Instance  CStructural_svpredr n g : CStructural svpred (GRec n g) g. Proof. constructor. simpl. done. Qed.
+Instance  CStructural_apredr g : CStructural apred (GRec g) g. Proof. constructor. simpl. done. Qed.
+Instance  CStructural_spredr g : CStructural spred (GRec g) g. Proof. constructor. simpl. done. Qed.
+Instance  CStructural_ppredr g : CStructural ppred (GRec g) g. Proof. constructor. simpl. done. Qed.
+Instance  CStructural_npredr p g : CStructural (npred p) (GRec g) g. Proof. constructor. simpl. done. Qed.
+Instance  CStructural_svpredr g : CStructural svpred (GRec g) g. Proof. constructor. simpl. done. Qed.
 
 Instance  CStructural_apredm a u g : CStructural apred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
 Instance  CStructural_spredm a u g : CStructural spred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
 Instance  CStructural_ppredm a u g : CStructural ppred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
-Instance  CStructural_npredm p a u g : CStructural (npred p) (GMsg a u g) g. Proof. constructor.  rewrite /npred /= !inE. Locate inE.  Check inE.  split_and. Qed.
+Instance  CStructural_npredm p a u g : CStructural (npred p) (GMsg a u g) g. Proof. constructor.  rewrite /npred /= !inE. split_and. Qed.
 Instance  CStructural_svpredm a u g : CStructural svpred (GMsg a u g) g. Proof. constructor. simpl. lia. Qed.
 
 
@@ -185,7 +185,7 @@ eapply notin_big in H1. apply : H1. done. Qed.
 Instance Goal_msg_action a v g : {goal (apred (GMsg a v g))} -> {goal ptcp_from a != ptcp_to a}. move=>[] H. constructor. simpl in H. split_and. Qed.
 Instance Goal_branch_action a gs : {goal (apred (GBranch a gs))} -> {goal ptcp_from a != ptcp_to a}. move=>[] H. constructor. simpl in H. split_and. Qed.
 
-Instance traverse_action_pred_unf : forall g0 g1 i, {goal lpreds [::apred] g0} -> {goal lpreds [::apred] g1} -> {goal apred (g0[s g1//i])}.
+(*Instance traverse_action_pred_unf : forall g0 g1 i, {goal lpreds [::apred] g0} -> {goal lpreds [::apred] g1} -> {goal apred (g0[s g1//i])}.
 Proof.  intros. destruct H,H0. constructor.
 elim : g0 g1 i H H0 ;intros;rewrite /=;rs;try done. 
 - rifliad. cc. 
@@ -207,10 +207,10 @@ Qed.
 
 
 Instance traverse_size_pred_unf : forall g0 g1 i, {goal lpreds [::spred] g0} -> {goal lpreds [::spred] g1} -> {goal spred (g0[s g1//i])}.
-Proof.  intros.  constructor.  apply size_pred_subst.   destruct H. cc. destruct H0. cc. Qed.
+Proof.  intros.  constructor.  apply size_pred_subst.   destruct H. cc. destruct H0. cc. Qed.*)
 
 
-Instance bound_CGPred (A : substType) : CGPred (@bound A). repeat constructor. Qed.
+(*Instance bound_CGPred (A : substType) : CGPred (@bound A). repeat constructor. Qed.
 Check CStructural.
 Check bound.
 Instance CStructural_bound_msg  a u g: CStructural (bound)  (GMsg a u g) g.
@@ -240,6 +240,7 @@ rs. rs_in b. by apply/eqP. Qed.
 Instance CStructural_bounde_msg d a u g: CStructural bound (EMsg d a u g) g.
 constructor. rewrite  /=. done. Qed.
 
+*)
 
 
 
@@ -247,7 +248,7 @@ constructor. rewrite  /=. done. Qed.
 
 
 
-Instance  CGoal_all_boundeb d a gs : {goal bound (EBranch d a gs)} -> {goal all bound gs}. 
+(*Instance  CGoal_all_boundeb d a gs : {goal bound (EBranch d a gs)} -> {goal all bound gs}. 
 move => [] H. constructor.  simpl in H. move : H.  rewrite /bound. rs. rewrite big_map.  induction gs. rewrite big_nil. done. rewrite big_cons. rewrite /=. move/eqP=>HH. rewrite IHgs //=. split_and. 
 apply/eqP/fsetP=>k. rewrite !inE.
 have :  (k \in fv a0 `|` \bigcup_(j <- gs) fv j) = (k \in fset0). move : HH. move/fsetP=>HH. rewrite HH. done. 
@@ -265,7 +266,7 @@ Qed.
 
 Instance bounde_unf g n : {goal bound (ERec n g)} -> {goal bound (g[s ERec n g//n])}.
 Proof. move => [].  constructor. move : b.   intros.   rewrite /bound. rewrite fv_subst /=. by simpl in b. 
-rs. rs_in b. by apply/eqP. Qed.
+rs. rs_in b. by apply/eqP. Qed.*)
 
 Instance goallpreds_cons (A : eqType) (p : pred A) g (l : seq (pred A)): {goal p g} -> {goal (lpreds l g) } -> {goal lpreds (p::l) g}. move => [] H [] H0. constructor. unlock lpreds. simpl. unlock lpreds in H0.  split_and. Qed.
 
@@ -273,10 +274,10 @@ Instance goallpreds_nil (A : eqType) (g : A) : {goal lpreds nil g}. constructor.
 
 Instance goallpreds_allcons (A : eqType) (p : pred A) gs (l : seq (pred A)): {goal all p gs} -> {goal all (lpreds l) gs } -> {goal all (lpreds (p::l)) gs}. move => [] H [] H0. constructor. unlock lpreds. simpl. unlock lpreds in H0. rewrite all_predI. split_and. Qed.
 
-Lemma lpredsT (A : eqType) : forall g, lpreds [::(predT : pred A)] g = true.
+Lemma lpredsT (A : eqType) : forall g, lpreds ([::predT : pred A]) g = true.
 Proof. ul. intros. by simpl. Qed.
 
-Instance traverse_predTG (A : eqType)  g : {goal lpreds [::predT : pred A] g}.
+Instance traverse_predTG (A : eqType)  g : {goal lpreds ([::predT : pred A]) g}.
 constructor. rewrite lpredsT. done. Defined. 
 
 Instance traverse_predTallG  (A : eqType)  (gs : seq A) : {goal all predT gs}.
@@ -309,14 +310,14 @@ Instance ipred_CGPred p : CGPred (ipred p). constructor. constructor. Qed.*)
 (*Important for membership to work*)
 Hint Resolve mem_nth : typeclass_instances.
 
-Instance step_action : forall g l g', {goal step g l g'} -> {goal lpreds [::apred;spred] g} -> {goal apred g'}.  
+(*Instance step_action : forall g l g', {goal step g l g'} -> {goal lpreds ([::apred;spred]) g} -> {goal apred g'}.  
 Proof.
 move => g l g' [] H [] H0. constructor. elim : H H0; rewrite /=;split_and;cc.
 apply H0. cc.
-apply H0. cc.
+apply H0. cc. rewrite /gsubst. cc.
 Qed.
 
-Instance step_size : forall g l g',{goal step g l g'} -> {goal lpreds [::apred;spred] g} -> {goal spred g'}.  
+Instance step_size : forall g l g',{goal step g l g'} -> {goal lpreds ([::apred;spred]) g} -> {goal spred g'}.  
 Proof.
 move => g l g' [] H [] H0. constructor.  elim : H H0; rewrite /=;intros;split_and;cc.
 apply H0. cc. rewrite -H.  cc. apply H0. cc. 
@@ -345,4 +346,4 @@ Instance linear_unf : forall g n, {hint Linear (GRec n g)} -> {goal Linear g[s G
 Proof. move => g n. apply chint_imp.
 intros.  unfold Linear in *. intros. apply : H. constructor. eauto. done. 
 Qed.
-
+*)

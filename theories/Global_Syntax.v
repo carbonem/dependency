@@ -4,13 +4,13 @@ From mathcomp Require Import all_ssreflect zify.
 From Equations Require Import Equations.
 From deriving Require Import deriving. Locate In.
 
-From Dep Require Export Utils. 
+From Dep Require Export Utils Syntax. 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Inductive ptcp  : Set :=
-  | Ptcp : nat   -> ptcp .
+(*Inductive ptcp  : Set :=
+  | Ptcp : nat   -> ptcp .*)
 
 Definition nat_of_ptcp (p : ptcp) := let: Ptcp n := p in n.
 Canonical ptctp_newType := Eval hnf in [newType for nat_of_ptcp]. 
@@ -22,8 +22,8 @@ Definition ptcp_countMixin := [countMixin of ptcp by <:].
 Canonical ptcp_countType := CountType ptcp ptcp_countMixin.
 
 
-Inductive ch  : Set :=
-  | Ch : nat   -> ch .
+(*Inductive ch  : Set :=
+  | Ch : nat   -> ch .*)
 
 Definition nat_of_ch (c : ch) := let: Ch n := c in n.
 Canonical ch_newType := Eval hnf in [newType for nat_of_ch].
@@ -35,7 +35,7 @@ Definition ch_countMixin := [countMixin of ch by <:].
 Canonical ch_countType := CountType ch ch_countMixin.
 
 
-Inductive action  : Set := Action of ptcp & ptcp & ch.
+(*Inductive action  : Set := Action of ptcp & ptcp & ch.*)
 
 Definition prod_of_action (a : action) := let '(Action p0 p1 c) := a in (p0,p1,c). 
 Definition action_indDef := [indDef for action_rect].
@@ -77,7 +77,7 @@ Unset Elimination Schemes. Check seq.
 Inductive gType  : Set :=
   | GVar : nat -> gType  
   | GEnd : gType  
-  | GRec : nat -> gType -> gType  
+  | GRec : gType -> gType  
   | GMsg : action -> value -> gType -> gType  
   | GBranch : action -> seq gType -> gType  
  with value  : Set  :=
@@ -92,7 +92,7 @@ Inductive gType  : Set :=
   | EEnd : endpoint  
   | EMsg : dir -> ch -> value -> endpoint -> endpoint  
   | EBranch  : dir -> ch  -> seq endpoint -> endpoint  
-  | ERec : nat -> endpoint -> endpoint .
+  | ERec : endpoint -> endpoint .
 Set Elimination Schemes.
 
 
@@ -121,7 +121,7 @@ Variables (Pg : gType -> Type)
 
 Hypothesis Pg_var : (forall n : nat, Pg (GVar n)).
 Hypothesis Pg_end : Pg GEnd.
-Hypothesis Pg_rec : (forall g : gType, Pg g -> forall n, Pg (GRec n g)).
+Hypothesis Pg_rec : (forall g : gType, Pg g -> Pg (GRec g)).
 Hypothesis Pg_msg : (forall (a : action) (v : value), Pv v -> forall g : gType, Pg g -> Pg (GMsg a v g)).
 Hypothesis Pg_branch : (forall (a : action) (l : seq gType), P_glist l  -> Pg (GBranch a l)).
 
@@ -136,7 +136,7 @@ Hypothesis Pe_var : forall n : nat, Pe (EVar n).
 Hypothesis Pe_end : Pe EEnd.
 Hypothesis Pe_msg : forall (d : dir) (c : ch) (s : value), Pv s -> forall e : endpoint, Pe e -> Pe (EMsg d c s e).
 Hypothesis Pe_branch : forall (d : dir) (c : ch) (l : seq endpoint), P_elist l  -> Pe (EBranch d c l).
-Hypothesis Pe_rec : forall e : endpoint, Pe e -> forall n, Pe (ERec n e).
+Hypothesis Pe_rec : forall e : endpoint, Pe e -> Pe (ERec e).
 
 Hypothesis P_glist_0 : P_glist nil.
 Hypothesis P_glist_cons : forall g, Pg g -> forall l, P_glist l -> P_glist (g::l).
@@ -157,7 +157,7 @@ Fixpoint gType_rect g : Pg g :=
   match g with 
    | GVar n => Pg_var n
    | GEnd => Pg_end
-   | GRec n g => Pg_rec (gType_rect g) n
+   | GRec g => Pg_rec (gType_rect g)
    | GMsg a u g => Pg_msg a (value_rect u) (gType_rect g)
    | GBranch a l => Pg_branch a (seq_gType_rect l)
    end
@@ -190,7 +190,7 @@ match e with
 | EEnd => Pe_end
 | EMsg d c m e => Pe_msg d c (value_rect m) (endpoint_rect e)
 | EBranch d c es => Pe_branch d c (seq_endpoint_rect es)
-| ERec n e => Pe_rec  (endpoint_rect e) n
+| ERec e => Pe_rec  (endpoint_rect e)
 end.
 
 
@@ -255,7 +255,7 @@ let list_eq := fix list_eq s1 s2 {struct s1} :=
 in
 match g0, g1 with
 | GMsg a0 v0 g0', GMsg a0' v0' g1' => (a0 == a0') && value_eqb v0 v0' && (gType_eqb g0' g1') 
-| GRec n g0', GRec n1 g1' => (n == n1) && gType_eqb g0' g1' 
+| GRec g0', GRec g1' => gType_eqb g0' g1' 
 | GEnd, GEnd => true
 | GBranch a gs, GBranch a' gs' => (a == a') && (list_eq  gs gs')
 | GVar n, GVar n' => n == n'
@@ -288,7 +288,7 @@ match e0, e1 with
 | EEnd , EEnd => true
 | EMsg d ch0 s0 e0, EMsg d1 ch1 s1 e1 =>  (d == d1) && (ch0 == ch1) && (value_eqb s0 s1) && (endpoint_eqb e0 e1)
 | EBranch d0 ch0 s0, EBranch d1 ch1 s1 => (d0 == d1) && (ch0 == ch1) && (list_eq s0 s1)
-| ERec n0 e0, ERec n1 e1 => (n0 == n1) && endpoint_eqb e0 e1
+| ERec e0, ERec e1 => endpoint_eqb e0 e1
 | _ , _ => false
 end
 with mysort_eqb (st0 st1 : mysort) {struct st0} :=
@@ -370,7 +370,7 @@ Lemma axioms_eqbs : leib_eq gType_eqb *  (leib_eq mysort_eqb *  (leib_eq value_e
 Proof. unfold leib_eq.  apply : mut_ind. 
 - intro. case_filter. intros. rewrite /=. inj.
 - case_filter.
-- intros g IH. case_filter.  rewrite /=. destruct b. split;done. split;done.   split. 
+- intros g IH. case_filter.  rewrite /=. 
 Admitted.
 (*
 - intros. case_filter_on b. rewrite /=. split.  
@@ -491,7 +491,7 @@ Lemma gType_ind
      : forall (Pg : gType -> Prop),
        (forall n : nat, Pg (GVar n)) ->
        Pg GEnd ->
-       (forall g : gType, Pg g -> forall n, Pg (GRec n g)) ->
+       (forall g : gType, Pg g -> Pg (GRec g)) ->
        (forall (a : action) (v : value),
         forall g : gType,
         Pg g -> Pg (GMsg a v g)) ->
@@ -510,7 +510,7 @@ Lemma endpoint_ind
      : forall (Pe : endpoint -> Prop),
        (forall n : nat, Pe (EVar n)) ->
        Pe EEnd ->
-       (forall e : endpoint, Pe e -> forall n, Pe (ERec n e)) ->
+       (forall e : endpoint, Pe e -> Pe (ERec e)) ->
        (forall d c (v : value),
         forall e : endpoint,
         Pe e  -> Pe (EMsg d c v e)) ->
