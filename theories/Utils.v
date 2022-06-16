@@ -1,4 +1,4 @@
-From mathcomp Require Import all_ssreflect zify.
+From mathcomp Require Import all_ssreflect finmap zify.
 
 
 Set Implicit Arguments.
@@ -43,6 +43,19 @@ Proof.
 intros.  split. apply forallzipP1. done. move/forallzipP2=>HH. apply HH. done. 
 Qed.
 
+Lemma forallzipto1 : forall (A B : Type) (P : A -> Prop) (l : seq A) (l' : seq B), size l = size l' -> 
+Forall (fun p => P p.1) (zip l l') -> Forall P l.
+Proof.
+move => A B P. elim. case. done. done. intros. destruct l'. simpl in H0. done. simpl in *. inversion H1. subst. simpl in *. constructor. done. apply :H. inversion H0. eauto. done. 
+Qed.
+
+Lemma forallzipto2 : forall (A B : Type) (P : B -> Prop) (l' : seq B) (l : seq A), size l = size l' -> 
+Forall (fun p => P p.2) (zip l l') -> Forall P l'.
+Proof.
+move => A B P. elim. case. done. done. intros. destruct l0. simpl in H0. done. simpl in *. inversion H1. subst. simpl in *. constructor. done. apply :H. inversion H0. eauto. done. 
+Qed.
+
+
 Lemma forallP : forall (A : eqType) (P : A -> Prop) a l,(forall x0, x0 < size l -> P (nth a l x0)) -> 
 Forall P l.
 Proof. intros.
@@ -83,3 +96,40 @@ Ltac split_and := intros;repeat (match goal with
                   end);auto.
 
 Lemma negb_involutive : forall b, ~~ ~~ b = b. case;done. Qed.
+
+
+Open Scope fset_scope.
+Lemma big_exists : forall (A : eqType) (B : choiceType) (l : seq A) (f0 : A -> {fset B}) p, p \in \bigcup_(j <- l) (f0 j) = has (fun x => p \in f0 x) l. 
+Proof. 
+move => A B. elim. move => f0 p. rewrite big_nil. done. intros. simpl. rewrite big_cons !inE. destruct ( (p \in f0 a) ) eqn:Heqn;rewrite /=. 
+done.
+apply H.
+Qed.
+
+Lemma big_f_eq : forall (A : eqType) (B : choiceType)  (l : seq A) (f : A -> {fset B}) f1, (forall g, g \in l -> f g = f1 g) ->  \bigcup_(j <- l) (f j) =  \bigcup_(j <- l) (f1 j).
+Proof. move => A B. elim. intros. by rewrite !big_nil.
+intros. rewrite !big_cons. f_equal. auto. apply H. auto. 
+Qed.
+
+Lemma big_if : forall (A : eqType) (B : choiceType) (l : seq A) (p : pred A) (f : A -> {fset B}) S, 
+                  \bigcup_(j <- l) (if p j then f j `|` S else f j) = 
+                   (\bigcup_(j <- l) (f j)) `|` (if has p l then S else fset0).
+Proof. move => A B. elim. intros. rewrite !big_nil /=. apply/fsetP=>k. by rewrite !inE. 
+intros. rewrite !big_cons /= H. rifliad. all : apply/fsetP=>k; rewrite !inE; lia. 
+Qed.
+
+Lemma big_cup_in : forall (A : eqType) (B: choiceType) n (l : seq A) (f0 f1 : A -> {fset B}), (forall x n, x \in l -> n \in (f0 x) -> n \in (f1 x)) -> n \in \bigcup_(j <- l) (f0 j) ->  n \in \bigcup_(j <- l) (f1 j).
+Proof. move => A B n. elim. move => f0 f1.  rewrite big_nil. done. intros. move : H1. rewrite !big_cons !inE. move/orP=>[].  intros. rewrite H0 //=. intros. erewrite H. lia. intros. apply H0. eauto. eauto. apply b. 
+Qed.
+
+
+Ltac norm_eqs := repeat (match goal with 
+                   | [ H : (_ == _) |- _ ] => move : H => /eqP=>H
+                   | [ H : (_ == _) = true |- _ ] => move : H => /eqP=>H
+                   | [ H : (_ == _) = false |- _ ] => move : H => /negbT=>H
+
+                  end);subst;repeat (match goal with 
+                   | [ H : is_true (?a != ?a_) |- _ ] => rewrite eqxx in H;done 
+
+                  end).
+

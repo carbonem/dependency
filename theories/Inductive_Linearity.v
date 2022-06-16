@@ -7,34 +7,9 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 From deriving Require Import deriving.
 From Dep Require Export Utils.
-From Dep Require Import NewSyntax Substitutions.
+From Dep Require Import NewSyntax Bisimulation Structures.
 
-(*From Dep Require Import Global_Syntax Substitutions.*)
-
-
-Open Scope fset_scope.
-Open Scope fmap_scope.
-
-Coercion ptcps_of_act (a : action) := ptcp_from a |` [fset ptcp_to a].
-
-Definition label := (action * (value + nat))%type.
-
-Coercion to_action (l : label) : action := l.1.
-
-
-Canonical action_predType := PredType (fun a p => p \in ptcps_of_act a). 
-
-Lemma ptcps_of_act_eq : forall a, ptcps_of_act a = [fset ptcp_from a; ptcp_to a].
-Proof. done. Qed.
-
-Lemma in_action_eq : forall p a, p \in ptcps_of_act a = (p == ptcp_from a) ||  (p == ptcp_to a).
-Proof. intros. destruct a. by rewrite /= /ptcps_of_act !inE /=.  Qed.
-
-Let inE := (inE,ptcps_of_act_eq,Bool.negb_involutive,eqxx,negb_or,negb_and).
-
-
-(*Let inE := Substitutions.inE.*)
-
+Let inE := NewSyntax.inE.
 
 
 
@@ -102,23 +77,6 @@ Ltac contra_list := match goal with
 
 
 
-
-(*
-Parameter (c : action).
-Definition g' := (GRec (GBranch c ([::GVar 0;GVar 1]))).
-Definition g := (GRec g'). 
-
-Lemma test : (gunf ids g) = GBranch c ([::g';g]). done. Qed.
-*)
-
-
-
-Inductive Tr : seq action -> gType  -> Prop :=
-| TR_nil G : Tr nil G 
-| TRMsg a u aa g0 : Tr aa g0 -> Tr (a::aa) (GMsg a u g0)
-| TRBranch d a n gs aa  : n < size gs -> Tr aa (nth d gs n) ->  Tr (a::aa) (GBranch a gs)
-| TRUnf aa g : Tr aa (g[g GRec g.:var])  -> Tr aa (GRec g).
-Hint Constructors Tr.
 
 Definition exists_depP  (Pm : seq bool -> Prop) (P : seq action -> Prop) a0 aa a1 := exists m, size m = size aa /\ P (a0::((mask m aa))++[::a1]) /\ Pm m.
 Notation exists_dep := (exists_depP (fun _ => True)).
@@ -238,16 +196,31 @@ Qed.
 
 
 
-Unset Elimination Schemes. Check Forall.
+
+(*I need to bake all predicates into the definition because of the bisimulation rule, 
+  If we don't assume stuff about the bisimilar g'' we pick, they must be derived from the other g it is bisimilar to
+  but these properties are not easy to show will be equal on bisimilar terms, it's also not interesting,
+  we can simply assert that the rule can only be used with a gType that has the necessary properties gpred.
+  If we wanted to be minimal, we could simply have assumed gpred g'' in the last rule and left out the rest
+  but that would be a weird set of rules, where the necessary assumptions for well formed terms only is put on
+  g'' and the rest must be constrained when we define our lemmas as extra assumptions not included in the step judgment*)
+
+Definition linear (g : gType) := true. 
+Lemma linearP : forall g, reflect (Linear g)  (linear g). 
+Admitted.
+
+Notation gpred := (lpreds (linear::contractive2::(bound_i 0)::rec_pred)). 
+Notation epred := (lpreds (econtractive2::(ebound_i 0)::esize_pred::nil)).
 
 
 
+Unset Elimination Schemes. 
 Inductive step : gType -> label  -> gType -> Prop :=
- | GR1 (a : action) u g : contractive2 g -> step (GMsg a u g) (a, inl u) g
- | GR2 a n gs : all contractive2 gs -> n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
- | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
- | GR4 a l gs gs' : size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
- | GR_rec g l g' g'' : contractive2 g -> contractive2 g'' -> bisimilarg g g'' -> step g'' l g'  -> step g l g'. (*Add contractiveness assumption on g'' because we cant derive contractiveness of g'' from g : counter example : bisimilar a.end and a.(mu. 0) but the second is not contractive*)
+ | GR1 (a : action) u g : gpred (GMsg a u g) -> step (GMsg a u g) (a, inl u) g
+ | GR2 a n gs : gpred (GBranch a gs) -> n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
+ | GR3 a u l g1 g2 : gpred (GMsg a u g1) -> step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
+ | GR4 a l gs gs' : gpred (GBranch a gs) -> size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
+ | GR_rec g l g' g'' :  gpred g -> gpred g'' -> bisimilar g g'' -> step g'' l g'  -> step g l g'. (*Add contractiveness assumption on g'' because we cant derive contractiveness of g'' from g : counter example : bisimilar a.end and a.(mu. 0) but the second is not contractive*)
 Set Elimination Schemes. 
 Hint Constructors step. 
 
@@ -255,17 +228,17 @@ Hint Constructors step.
 
 Lemma step_ind
      :  forall P : gType -> label -> gType -> Prop,
-       (forall (a : action) (u : value) (g : gType), contractive2 g -> P (GMsg a u g) (a, inl u) g) ->
-       (forall (a : action) (n : nat) (gs : seq gType), all contractive2 gs ->
+       (forall (a : action) (u : value) (g : gType), gpred (GMsg a u g) -> P (GMsg a u g) (a, inl u) g) ->
+       (forall (a : action) (n : nat) (gs : seq gType), (gpred (GBranch a gs)) ->
         n < size gs -> P (GBranch a gs) (a, inr n) (nth GEnd gs n)) ->
-       (forall (a : action) (u : value) (l : label) (g1 g2 : gType),
+       (forall (a : action) (u : value) (l : label) (g1 g2 : gType), gpred (GMsg a u g1) ->
         step g1 l g2 ->
         P g1 l g2 -> ptcp_to a \notin l.1 -> P (GMsg a u g1) l (GMsg a u g2)) ->
-       (forall (a : action) (l : label) (gs gs' : seq gType), size gs = size gs' ->
+       (forall (a : action) (l : label) (gs gs' : seq gType), gpred (GBranch a gs) ->  size gs = size gs' ->
         Forall (fun p => step p.1 l p.2) (zip gs gs') ->  Forall (fun p => P p.1 l p.2) (zip gs gs') -> 
 
         ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
-       (forall g l g' g'', contractive2 g -> contractive2 g'' -> bisimilarg g g'' -> step g'' l g' -> P g'' l g' -> P g l g') ->
+       (forall g l g' g'', gpred g -> gpred g'' -> bisimilar g g'' -> step g'' l g' -> P g'' l g' -> P g l g') ->
        forall (s : gType) (l : label) (s0 : gType), step s l s0 -> P s l s0.
 Proof.
 move => P H0 H1 H2 H3 H4. fix IH 4.
@@ -280,721 +253,27 @@ Qed.
 Require Import Paco.paco.
 
 
-Check act_ofg.
 Definition ext_act (p : option (action * option value + fin)) : option action :=
 if p is Some (inl (a,_)) then Some a else None.
 
 Fixpoint new_tr s g := 
 match s with 
 | nil => true 
-| a::s' => (ext_act (act_ofg g) == Some a) && (has (fun g => new_tr s' g) (nextg g))
+| a::s' => (ext_act (act_of g) == Some a) && (has (fun g => new_tr s' g) (next g))
 end.
 
-(*Lemma act_ofg_subst : forall g sigma, act_ofg g [g sigma] = act_ofg g.
-Proof.
-elim;rewrite /=;try done. intros. *)
-(*Lemma next_auxg_sigma : forall g sigma1 sigma2, (forall n, next_auxg sigma1 (sigma2 n) = [:: (sigma2 n) [gsigma1]]) -> next_auxg sigma1 g [g sigma2] = next_auxg (sigma2 >> fun g => g[g sigma1]) g.
-Proof.
-elim;rewrite /=;asimpl;try done;intros. 
-destruct n.  asimpl. done. asimpl. done. 
-apply H. *)
-
-(*
-
-Fixpoint bound_i (i : nat) g  := 
-match g with 
-| GEnd => true
-| GMsg _ _ g0 => bound_i i g0
-| GBranch _ gs => all (bound_i i) gs
-| GRec g0 => bound_i (S i) g0
-| GVar n => n < i
-end.*)
-
-(*Definition sapp (sigma0 sigma1 : nat -> gType) k := fun n => if n < k then sigma0 n else sigma1 n.*)
-
-(*Definition bound g := forall sigma, g[g sigma] = g.
-
-
-Fixpoint rem_rec g := if g is GRec g' then rem_rec g' else g.
-
-Fixpoint accum_sig g sigma := if g is GRec g' then accum_sig g' (g.:sigma) else sigma.*)
-
-Fixpoint contractive_i (d : nat) g :=
-match g with 
-| GEnd => true
-| GMsg _ _ g0 => contractive_i 0 g0
-| GBranch _ gs => all (contractive_i 0) gs
-| GRec g0 => contractive_i (S d) g0
-| GVar n => d <= n
-end. 
-
-(*bound contractive into some predicate*)
-Lemma gunf_cont : forall g l, contractive_i (size l) g -> mu_height (gunf l g) = 0.
-Proof.
-elim;rewrite /=;intros;try done.  
-elim : l n H.  done.
-intros. simpl. destruct n. done. asimpl.
-apply H. done.
-apply H. simpl.  done.
-Qed.
-
-
-Lemma l_to_sig_n : forall l n, size l <= n -> (l_to_sig l n) = var (n - (size l)).
-Proof.
-elim. simpl. intros. asimpl. have : n - 0 = n by lia. move=>-> //=. 
-intros. simpl. destruct n.   done.  simpl. have : n.+1 - (size l).+1 = n - (size l). lia. move=>->. 
-apply H.  done. 
-Qed.
-
-Lemma l_to_sig_nth : forall l n, l_to_sig l n = nth (var (n - (size l))) l n.
-Proof. 
-elim.  intros. simpl. destruct n.  done. simpl. done.
-intros. simpl. destruct n. done.  simpl. have : n.+1 - (size l).+1 = n - size l by lia.   move=>->. apply H. 
-Qed.
-
-
-Lemma l_to_sig_nth2 : forall l n, n < size l -> l_to_sig l n = nth (var (n)) l n.
-Proof. 
-intros. rewrite l_to_sig_nth. 
-erewrite set_nth_default.  eauto.  done.
-Qed.
-
-
-Fixpoint bound_i (i : nat) g  := 
-match g with 
-| GEnd => true
-| GMsg _ _ g0 => bound_i i g0
-| GBranch _ gs => all (bound_i i) gs
-
-| GRec g0 => bound_i (S i) g0
-| GVar n => n < i
-end.
-
-Lemma bound_cont_eq : forall (g : gType) i, bound_i i g -> contractive_i i g -> (forall j, contractive_i j g).
-Proof.
-elim; rewrite/=;auto.
-- rewrite /=. move => v i /ltP + /leP. lia. 
-- rewrite /=. intros. eauto. 
-Qed.
-
-Lemma contractive_ren : forall g j sigma, (forall n, n <= sigma n) ->  contractive_i j g -> contractive_i j g ⟨g sigma ⟩.
-Proof.
-elim;intros;simpl.
-simpl in H0. specialize H with n. lia. done.  asimpl. apply H.  intros. 
-destruct n. done. simpl. asimpl. specialize H0 with n. lia.
-done. simpl in H1. apply H.  auto. done.
-rewrite all_map. apply/allP. intro. intros. simpl. apply H. done. auto. simpl in H1.  apply (allP H1).  done.
-Qed.
-
-
-Lemma bound_lt : forall (g : gType) i j, i < j -> bound_i i g -> bound_i j g.
-Proof. 
-elim.
-- rewrite /=;auto. move=>n i j.  move=> /leP H /ltP H1. apply/ltP.  lia. 
-- rewrite /=;auto. intros. apply : (@H i.+1 j.+1); done. 
-- rewrite /=;auto. 
-- intros. move : (allP H1) => H2. apply/allP.  move=> Hin H4. apply H2 in H4 as H5. apply : (H _ _ _ _ H0).
-  done.
-- intros. apply (allP H1). done. 
-Qed.
-
-Fixpoint substitution (i : nat) g g'  := 
-match g with 
-| GEnd => GEnd
-| GMsg a u g0 => GMsg a u (substitution i g0 g')
-| GBranch a gs => GBranch a (map (fun g => substitution i g g) gs)
-| GRec g0 => GRec (substitution i.+1 g0 g') 
-| GVar n => if n == i then g' else g
-end.
-
-
-(*Lemma bound_contractive_subst : forall (g g': gType) i j, bound_i (S i) g -> contractive_i j g -> bound_i 0 g' -> (forall j, contractive_i j g') -> 
-contractive_i j (substitution i g g').
-Proof.
-elim. 
-- rewrite /=. intros. rifliad. done.
-- rewrite /=. intros. apply H. done. done. done. done. 
-- rewrite /=. intros. apply/allP. move=> gsub Hin. move : (mapP Hin). case. 
-intros. subst. apply H. by apply/InP. move : (allP H0). 
-move => H4. apply H4 in p. done. move : (allP H1). move => H4. apply H4 in p. done. done. 
-  intros. done.
-- rewrite /=. intros. 
-apply H. done. done. done. done. 
-- rewrite /=. intros.  apply/andP. move : (andP H1) (andP H2)=> [] + +[]. intros. split; auto. 
-Qed.*)
-
-
-(*Lemma contractive_subst : forall g sigma j, (forall n, (exists n', sigma n = var n' /\ n'<= n) \/ forall j, contractive_i j (sigma n)) ->  contractive_i j g -> contractive_i j g[g sigma].
-Proof.
-elim;rewrite /=;intros;try done.
-edestruct H.   destruct H1,H1.  rewrite H1. simpl. lia. eauto. eauto. 
-asimpl. apply : H. eauto. intros. destruct n. simpl.  auto. simpl. 
-edestruct H0. 
-rewrite /funcomp H. asimpl. auto. 
-right. 
-intros. simpl.  asimpl. apply contractive_ren. auto. auto.  auto. 
-apply : H.   eauto. auto. auto.   
-rewrite all_map. apply/allP. intro. intros. simpl. apply/H. done. auto. apply (allP H1).  done.
-Qed.*)
-
-(*
-Lemma cont3 : forall l j n, all (contractive_i j) l -> contractive_i j (l_to_sig l n).
-Proof.
-intros. rewrite l_to_sig_nth.  
-elim : l j n H. rewrite /=. intros. auto.  
-intros. simpl in *. split_and. 
-move : (H j n H2)=>[]. intros. left.  destruct n.  done. simpl. simpl in a0.  
-have :  (n.+1 - (size l).+1) =  (n - (size l)).  lia. move=>->. 
-clear H H1. 
-destruct (n < (size l)) eqn:Heqn. 
-apply (allP H2). apply/mem_nth. done. 
-rewrite nth_default. rewrite nth_default in a0. simpl in a0. 
-simpl.  lia.
-apply/contractive_lt. 2 : { 
-  2 : { lia. done. 
-*)
-
-(*Lemma cont_cons : forall g j sigma, contractive_i j g[g sigma] -> contractive_i j.+1 g[g (scons (var 0) sigma)].
-Proof. 
-intros.*)
-
-Lemma bound_ren : forall g sigma, bound_i 0 g -> g ⟨g sigma ⟩ = g.
-Proof. Admitted. 
-
-
-
-(*Lemma cont_3 : forall g j l, contractive_i j g -> all (contractive_i (j - size l)) l ->  contractive_i (j - size l) g [g fun n => nth (var n) l n].
-Proof. 
-elim; try solve [rewrite /=;intros;try done];intros.
-simpl. destruct ( n < size l) eqn:Heqn.
-apply  (allP H0). apply/mem_nth. done.
-rewrite nth_default;last lia. simpl. simpl in H0. lia. admit. 
-simpl.  asimpl. 
-have : (j - size l).+1 = j - size (var 0 :: [seq g0 ⟨g ↑ ⟩ | g0 <- l]). rewrite /= size_map /=. lia.
-
-apply H. 
-fext. intros. destruct x. done. simpl. rewrite /funcomp. rewrite bound_ren. done. admit.
-simpl. intros. *)
-
-
-
-(*Lemma cont_unf : forall g (l : seq gType) j ,  (all (contractive_i j )l) -> contractive_i (j + size l) g -> contractive_i j (gunf l g).
-Proof. 
-elim;rewrite /=;intros;try done.
-rewrite l_to_sig_nth.  
-destruct (n < size l) eqn:Heqn. 
-apply (allP H). apply/mem_nth. done. Check l_to_sig_nth. 
-rewrite nth_default. simpl.  lia. lia.
-apply : H. simpl. split_and. 
-apply/contractive_le. 2 : {  eauto.  }  lia. 
-simpl.  apply/contractive_le. 2 : { eauto. } lia. 
-have : 0 = 0 - (size l) by lia. move =>->. clear H a v. 
-apply/cont_3. done.  have : 0 - size l = 0 by lia. move=>->.  
-elim : l g j H0 H1.  intros. simpl. have : 0 - 0 = 0 by lia. move=>->. asimpl. done.
-intros. simpl. apply/cont_3.
-apply/contractive_subst.  intros.
-rewrite l_to_sig_nth.  Check l_to_sig_nth. right. intros. 
-have : j - size l = j.+1 - (size l).+1. lia. move=>->. 
-apply : H. intros. simpl. split_and.
-have : (j.+1 - (size l).+1) = (j- (size l)). lia. move=>->. simpl.
-destruct ( (j - size l).+1 < j.+1) eqn:Heqn. apply/contractive_lt. apply : Heqn. eauto. 
-have : j <= (j - size l). lia. clear Heqn. intros. 
-have : (j - size l).+1 <= j.+1. lia. intros.
-
-apply/contractive_le. eauto. done. done. 
-apply/contractive_subst. intros.
- rewrite l_to_sig_nth. *)
-
-(*Lemma gunf_cont2 : forall g, contractive_i 0 g ->  (gunf nil (gunf nil g)) = gunf nil g.
-Proof.
-intros. move : H.  have : 0 = size (@nil nat). done. move=>-> H. move : (@gunf_cont g nil H)=>H'. 
-destruct (gunf nil g);try done. 
-simpl. asimpl. done. simpl. asimpl. rewrite map_id. done.
-Qed.
-*)
-(*Lemma gunf_idemp : forall g , contractive g -> gunf sigma' (gunf  g) = gunf sigma g. (*gunf ids (sigma n) = sigma n*)
-Proof.
-elim;rewrite /=;intros. destruct (sigma n); rewrite  //=;asimpl;try done.  
-rewrite map_id. done. done. asimpl.  apply H. intros. destruct n.  asimpl.
-  rewrite /gunf.  done. done. 
-apply H. intros. destruct n. asimpl. simpl.
-specialize  H with n. destruct (sigma n).  simpl. rewrite /gunf //=.'*)
-
-
-
-
-Lemma injective_shift : injective S.
-Proof. intro. intros. inversion H.  done. Qed.
-
-Hint Resolve injective_shift.
-
-
-
-
-Lemma inject2 : forall sigma, injective sigma ->  injective (0 .: sigma >> succn).
-Proof. 
-intros. intro. intros. destruct x1;destruct x2;try done. inversion H0. f_equal. apply/H. done. 
-Qed.
-
-Lemma inject_comp : forall (A B C : Type) (sigma : A -> B) (sigma' : B -> C) , injective sigma -> injective sigma' -> injective (sigma >> sigma').  
-Proof. 
-intros. rewrite /funcomp. intro. intros. apply H. apply H0. done.
-Qed.
-
-
-Hint Resolve inject2.
-
-Lemma guarded_ren : forall g sigma i , (forall n, sigma n != i) -> guarded i g -> guarded i g ⟨g sigma⟩.
-Proof.
-elim;rewrite /=;simpl;intros;try done.
-asimpl. apply : H. intros. destruct n.  done. simpl. specialize H0 with n. rewrite /funcomp. lia.
-done. 
-Qed.
-
-Lemma guarded_shift1 : forall g i sigma, injective sigma ->  guarded i g -> guarded (sigma i) g ⟨g sigma⟩.
-Proof.
-elim;rewrite /=;simpl;intros;try done.
-apply/eqP. move=> HH. apply H in HH. lia. 
-asimpl. 
-have : (sigma i).+1 = ((0 .: sigma >> succn) i.+1).
-destruct i.  simpl. rewrite /funcomp. done. simpl. rewrite /funcomp. done.
-move=>->. apply H. intro. intros. destruct x1;destruct x2;try done. inversion H2. f_equal.  apply/H0. done. 
-done. 
-Qed.
-
-
-
-Lemma guarded_shift2 : forall g i sigma, injective sigma ->  guarded (sigma i) g ⟨g sigma⟩ ->  guarded i g.
-Proof.
-elim;rewrite /=;simpl;intros;try done.
-apply/eqP. move=> HH. apply (negP H0). apply/eqP. f_equal. done. 
-apply :H.  2 : { apply : H1.  } 
-asimpl. auto. 
-Qed.
-
-
-Lemma guarded_shift : forall g sigma i , injective sigma  -> guarded i g <-> guarded (sigma i) g ⟨g sigma⟩.
-
-intros. split;intros; eauto using guarded_shift1, guarded_shift2.
-Qed.
-
-
-(*Lemma guarded_subst2: forall g i k sigma, injective sigma ->  guarded i g -> sigma i = var k -> guarded k g [g sigma].
-Proof.
-elim;rewrite /=;simpl;intros;try done.
-apply/eqP. move=> HH. apply H in HH. lia. 
-asimpl. 
-have : (sigma i).+1 = ((0 .: sigma >> succn) i.+1).
-destruct i.  simpl. rewrite /funcomp. done. simpl. rewrite /funcomp. done.
-move=>->. apply H. intro. intros. destruct x1;destruct x2;try done. inversion H2. f_equal.  apply/H0. done. 
-done. 
-Qed.*)
-
-
-
-
-
-
-
-Lemma inject_ren : forall g g0 sigma,injective sigma -> g ⟨g sigma⟩ = g0 ⟨g sigma ⟩ -> g = g0.
-Proof.
-elim;rewrite /=;try done;intros.
-move : H0. destruct g0;try done. asimpl. case. move/H=>->//=.
-destruct g0;try done.
-destruct g0;try done. f_equal. inversion H1. apply :H. 2 : {  eauto.} asimpl. auto.
-destruct g0;try done. simpl in H1. inversion H1. f_equal. apply : H. 2 : { eauto. }  done. 
-destruct g0;try done. simpl in H1. inversion H1. f_equal. 
-move : H4.  clear H1 H3.  elim : l l0 H;intros.   destruct l0. done.  done. 
-destruct l0. done.  simpl in*. f_equal. inversion H4. apply :H1. auto. 2 : { eauto. } done. 
-apply H. intros. apply :H1. auto. eauto. eauto. inversion H4. done.
-Qed.
-
-
-Lemma inject2' : forall sigma, injective sigma ->  injective (var 0 .: sigma >> ⟨g succn ⟩).
-Proof. 
-intros. intro. intros. destruct x1;destruct x2;try done. move : H0. asimpl. 
-destruct (sigma x2);done. move : H0. asimpl. destruct (sigma x1);done. f_equal. simpl in H0. 
-move : H0. apply/inject_comp. done. intro. intros. apply/inject_ren. 2 : { eauto. } eauto. 
-Qed.
-
-
-(*Lemma testtest : forall g sigma, injective sigma -> contractive2 g ->  contractive2 g ⟨g sigma ⟩.
-Proof.
-elim;rewrite /=;try done;intros.
-split_and. asimpl. have : 0 = (0 .: sigma >> succn) 0.   done. intros.  rewrite {1}x. apply/guarded_shift. 
-auto.  done. 
-asimpl. apply H.  auto. done. 
-rewrite all_map. apply/allP. intro. intros. simpl. apply H. done. done. apply (allP H1).  done.
-Qed.*)
-
-(*Lemma bound_guard : forall g i,  bound_i i g -> guarded i g.
-Proof.
-elim;rewrite /=;try done;intros.
-lia.  apply H.  done. 
-Qed.
-*)
-(*Lemma bound_guard : forall g i,  bound_i i g -> guarded i g.
-Proof.
-elim;rewrite /=;try done;intros.
-lia.  apply H.  done. 
-Qed.*)
-
-Lemma fv_shift : forall g v sigma, injective sigma ->  sigma v \in gType_fv g ⟨g sigma ⟩ ->   v \in gType_fv g. 
-Proof. 
-elim;rewrite /=;intros;try done. 
-- move : H0. rewrite !inE.  move/eqP.  move/H=>-> //=. 
-move : H1. move/imfsetP=>[] x /=. rewrite !inE /=. asimpl.  split_and.
-apply/imfsetP. destruct x.  done. simpl in *. clear H2. subst. 
-exists v.+1. simpl. rewrite !inE. split_and.
-apply : H. 2 : { apply : H1. } intro. intros. destruct x1;destruct x2. done. done. done. f_equal. 
-inversion H. apply/H0. done. 
-done. apply : H. eauto.  eauto. 
-move : H1. rewrite !big_map !big_exists. move/hasP=>[]. intros. apply/hasP.  exists x.  done. 
-eauto. 
-Qed.
-
-(*Lemma fv_shift2 : forall g v' sigma, injective sigma ->  v' \in gType_fv g ⟨g sigma ⟩ -> exists v, v \in gType_fv g /\ v' = sigma v. 
-Proof.
-elim;rewrite /=;intros;try done. 
-- move : H0. rewrite !inE.  move/eqP.  intros. exists n. rewrite !inE. auto. 
-move : H1. move/imfsetP=>[] x /=. rewrite !inE /=. asimpl.  split_and.
-apply H in H1. destruct H1,H1. destruct x0.  simpl in H3. lia. 
-simpl in *. subst. asimpl. simpl. exists x0. split;try done. 
-apply/imfsetP. simpl. exists ( (sigma >> succn) x0 ). rewrite !inE. split_and. done. simpl in *. clear H2. subst. 
-exists v.+1. simpl. rewrite !inE. split_and.
-apply : H. 2 : { apply : H1. } intro. intros. destruct x1;destruct x2. done. done. done. f_equal. 
-inversion H. apply/H0. done. 
-done. apply : H. eauto.  eauto. 
-move : H1. rewrite !big_map !big_exists. move/hasP=>[]. intros. apply/hasP.  exists x.  done. 
-eauto. 
-Qed.
-*)
-
-
-Print up_gType_gType.
-
-Print gType_fv. 
-Open Scope nat_scope.
-Print gType_fv.
-Fixpoint fvg (g : gType) : {fset (nat * bool)} := 
-match g with 
-| GMsg a u g0 => [fset (n,true) | n in gType_fv g  (* (fvg g0) *)]
-| GBranch  a gs  => [fset (n,true) | n in gType_fv g (*(\bigcup_(i <- (map fvg gs )) i)*) ] 
-| GRec g0  => [fset ((n.1).-1,n.2) | n in (fvg g0) & n.1 != 0]
-| GVar n => [fset (n,false)]
-| GEnd => fset0
-end.
-
-Lemma guarded_fvg1 : forall g i, guarded i g -> (i,false) \notin fvg g.  
-Proof.
-elim;rewrite /=;try done;intros;rewrite ?inE //=.
-lia. apply/imfsetP=>[]/= [] x /=. rewrite !inE. split_and. inversion q. 
-subst. apply/negP. apply : H. eauto. have : x.1.-1.+1 = x.1 by lia. move=>->.
-destruct x.  simpl in *. subst. done. 
-apply/imfsetP=>[] [] /= x HH []. done. 
-apply/imfsetP=>[] [] /= x HH []. done. 
-Qed.
-
-Lemma guarded_fvg2 : forall g i, ((i,false)  \notin fvg g) -> guarded i g.
-Proof.
-elim;rewrite /=;try done;intros.
-move : H. rewrite !inE. simpl. lia.
-apply H. move : H0.  move/imfsetP=>HH. apply/negP=>HH'. apply/HH. rewrite /=. 
-exists (i.+1,false). rewrite !inE. split_and. 
-rewrite /=. done. 
-Qed.
-
-Lemma guarded_fvg : forall g i, guarded i g <-> ((i,false) \notin fvg g).  
-Proof.
-intros. split;intros; auto using guarded_fvg1, guarded_fvg2. 
-Qed.
-
-(*Lemma fvg_subst : forall g sigma i b, injective sigma -> (sigma i = var i) -> (forall n b, (n,b) \notin (fvg (sigma n))) -> (i, b) \in fvg g [g sigma] ->  (i, b) \in fvg g.
-Proof.
-elim;rewrite /=;intros;try done. 
-rewrite !inE.  apply/eqP. 
-have : i = (fun k => if (sigma k) is GVar n' then n' else k) i.  rewrite H1.apply/eqP. f_equal. apply H in H1. subst. 
-destruct (eqVneq k n). done. subst. rewrite H1 /= !inE in H0. move : H0. move/eqP. case. intros. subst. done. 
-simpl in rewrite H0  /= !inE in H. done. 
-simpl in H. rewr*)
-
-Lemma gType_fv_ren: forall g sigma v, injective sigma -> sigma v \in gType_fv g ⟨g sigma⟩ -> v \in gType_fv  g. 
-Proof.
-elim;rewrite /=;intros;try done.
-move : H0. rewrite !inE. move/eqP. move/H. lia. 
-move : H1. move/imfsetP=>[] /= x. rewrite !inE. split_and.
-apply/imfsetP. simpl. destruct x.  done. simpl in *. 
-subst. exists v.+1;try done. rewrite !inE. split_and. apply : H.  2 : { apply : H1. } 
-asimpl. auto. apply : H.  2 : { eauto. } done. 
-move : H1. rewrite !big_map !big_exists. move/hasP=>[];intros. apply/hasP.
-exists x. done. apply : H.  done.  2 : { eauto. } done. 
-Qed.
-
-(*Lemma fvg_ren: forall g sigma v b, injective sigma -> (sigma v,b) \in fvg g ⟨g sigma⟩ -> exists b, (v,b) \in fvg g. 
-Proof.
-elim;rewrite /=;intros;try done. 
-move : H0. rewrite !inE. move/eqP. case. move/H. intros. subst. exists false. rewrite !inE. done.
-move : H1. move/imfsetP=>[] /= x. rewrite !inE. asimpl. split_and.  destruct x.  simpl in *.
-inversion q. subst.  
-move : H1. destruct n. done. simpl in *. subst. 
-have : (sigma v).+1 = ( 0 .: sigma >> succn) v.+1. simpl. done. 
-move=>->. move/H=>HH.
-have : injective (0 .: sigma >> succn). auto.  move/HH. move=>[] x /=. intros. 
-exists b0. 
-apply/imfsetP. simpl. exists (v.+1,b0). 2 : { simpl. done.  }
-rewrite !inE /=. split_and. done. simpl in *. apply : H. 
-2 : { rewrite -H4 in H1. apply : H1. } 
-auto.
-move : H1. move/imfsetP=>[] /= x. intros. destruct x. simpl in *. inversion q. subst. apply/imfsetP. inversion q. exists (v0,true);try done.
-simpl. subst. 
-destruct x.  simpl in *. subst. apply : H. 2 : { apply/gType_fv_ren. 2 : { eauto. } done. 
-move : H1.  rewrite !big_map. move/imfsetP=>[]x/=;intros. 
-inversion q. subst. 
-apply/imfsetP. exists v;try done.  
-simpl. move : p . rewrite !big_exists. move/hasP=>[];intros. apply/hasP.
-exists x. done. apply :gType_fv_ren. 2 : { eauto. } done.
-Qed.*)
-
-(*Lemma fvg_subst : forall g sigma v b, injective sigma -> (v,b) \in fvg g [g sigma] -> sigma v = var v ->  (v,b) \in fvg g.
-Proof. 
-elim;rewrite /=;try done;intros.
-- rewrite !inE. apply/eqP.
-Admitted.
-
-Lemma fvg_subst : forall g sigma v, injective sigma -> (v,false) \in fvg g [g sigma] -> exists2 x, (x \in gType_fv g) & ((v,false) \in fvg (sigma x)).
-Proof. Admitted.*)
-(*elim;rewrite /=;intros;try done. 
-exists n. rewrite !inE //=. done. 
-move : H1. move/imfsetP=>[] x /=. rewrite !inE. split_and. move : H1. asimpl. move/H=>HH.
-have : injective (var 0 .: sigma >> ⟨g ↑ ⟩) . 
-rewrite /shift. apply inject2'. done. move/HH=>[]. intros. 
-subst. clear HH.  
-exists x0.-1. 2 : { destruct x.  simpl in *. 
-destruct x0.  simpl in q0. 
-rewrite !inE in q0. move : q0.  move/eqP. case. intros. subst. done. 
-simpl in q0. rewrite /funcomp in q0. simpl. apply/fvg_ren. 2 : { instantiate (1 := S).  
-have : s.-1.+1 = s by lia. move=>->. apply : q0. }. 
-done.  } 
-apply/imfsetP. simpl. exists x0;try done. rewrite !inE. split_and.
-destruct x0.  simpl in q0. move : q0. rewrite !inE. move/eqP. destruct x.   case.
-intros. simpl in *. 
-lia. done. 
-move : H1. move/imfsetP=>[] /= x. intros. destruct a0. inversion q. subst. 
-apply : H. done.  done. 
-donedestruct (eqP q0). have : injective (((var 0 .: sigma >> ⟨g ↑ ⟩))). 
-apply  inject2'. done. move/H=>HH. apply HH in q0. 
-intro. intros. destruct x1;destruct x2;try done;simpl in *.
-
-
-
- move : p. move/H. apply H in p. apply/imfsetP. exists x0.-1. simpl. rewrite !inE. split_and. intro. intros. 
-destruct x1. simpl in H1. destruct x2. done. simpl in H1. move : H1. asimpl. destruct (sigma x2);try done.  
-simpl in H1. destruct x2. move : H1. asimpl. destruct (sigma x1);done. f_equal. simpl in H1. 
-move : H1.  rewrite /funcomp. intros. apply/inject2. destruct x1;destruct x2;simpl in H1;try done. 
-
-have : i = (fun k => if (sigma k) is GVar n' then n' else k) i.  rewrite H1.apply/eqP. f_equal. apply H in H1. subst. 
-destruct (eqVneq k n). done. subst. rewrite H1 /= !inE in H0. move : H0. move/eqP. case. intros. subst. done. 
-simpl in rewrite H0  /= !inE in H. done. 
-simpl in H. rewr*)
-
-Lemma contractive2_ren : forall g sigma, injective sigma -> (forall n, n <= sigma n) ->  contractive2  g -> contractive2 g ⟨g sigma ⟩.
-Proof.
-elim;intros;simpl;try done. 
-asimpl. split_and. have : 0 = ( 0 .: sigma >> succn) 0. done. intros. rewrite {1}x.
-
-rewrite -guarded_shift. simpl in H2. split_and. auto.
-apply H. auto.  case. done. done.  simpl in H2. split_and. apply H.  done. done. done.
-rewrite all_map. apply/allP. intro. intros. simpl. apply H. done.  done. done.  simpl in H2. apply (allP H2). done.
-Qed.
-
-(*Lemma guarded_subst : forall (g : gType) i sigma, guarded i g -> 
-(forall n, n <> i -> guarded i (sigma n)) -> guarded i (g[g sigma]).
-Proof. 
-elim;rewrite /=;simpl;intros;try done.
-apply H0.  lia. 
-asimpl. apply H.  done. 
-intros.  destruct n. done.  simpl. rewrite /funcomp. apply/guarded_shift.
-intro. intros. inversion H3.  done. 
-apply H1.  lia. 
-Qed.*)
-
-
-(*Lemma guarded_subst2 : forall g sigma i , sigma i = var i -> (forall n, n <> i -> guarded i (sigma n)) -> guarded i g -> guarded i g [g sigma].
-Proof.
-elim;rewrite /=;simpl;intros;try done.
-apply H0. lia. 
-asimpl. apply H.  simpl. asimpl. rewrite H0. done.
-intros. destruct n. done. simpl. asimpl. apply/guarded_shift. done. apply H1. lia. done. 
-Qed.*)
-
-Lemma guarded_sig2_ren : forall g sigma sigma' i, guarded i g ⟨g sigma⟩ -> (forall n, (sigma n) != i ->  (sigma' n) != i) -> guarded i g ⟨g sigma'⟩.
-Proof.
-elim;rewrite /=;intros;try done.
-apply H0. done.
-asimpl. apply : H. eauto. move => n.  asimpl. simpl. intros. destruct n. done. simpl in *. 
-move : H. rewrite /funcomp. intros. suff :  sigma' n != i.  lia. apply : H1. lia. 
-Qed.
-
-Lemma guarded_sig2 : forall g sigma sigma' i, guarded i g [g sigma] -> (forall n, guarded i (sigma n) -> guarded i (sigma' n)) -> guarded i g [g sigma'].
-Proof.
-elim;rewrite /=;intros;try done.
-apply H0. done.
-asimpl. apply : H. eauto. move => n.  asimpl. simpl. intros. destruct n. done. simpl in *.
-move : H. rewrite /funcomp. specialize H1 with n. move : H0. asimpl.
-intros. rewrite -guarded_shift. move : H. rewrite -guarded_shift.  move/H1. done. 
-done. done. 
-Qed.
-
-
-Lemma guarded_fv : forall g v, v \notin gType_fv g -> guarded v g.
-Proof.
-elim;rewrite /=;try done;intros.
-rewrite !inE in H. lia.
-apply H. move : H0. move/imfsetP=>HH. apply/negP=>HH'. apply HH. simpl. exists v.+1;try done.  
-rewrite !inE. split_and.
-Qed.
-
-Lemma inotin : forall g i sigma, (forall n, i !=  sigma n) -> i \notin gType_fv g ⟨g sigma ⟩.
-Proof.
-elim;rewrite /=;try done;intros. rewrite !inE. specialize H with n. lia.
-apply/imfsetP=>/=H'. destruct H'. rewrite !inE in H1.  destruct (andP H1). move : H3. asimpl. intros. apply/negP. apply : H. 2 : { apply : H3. } case. simpl. done. simpl. intros. asimpl. destruct x.  done. suff : x != sigma n. lia. 
-specialize H0 with n.  simpl in H2. subst. done. 
-rewrite !big_map big_exists. apply/negP. move/hasP=>HH. destruct HH. apply/negP. apply : H. eauto.
-2 : {  apply : H2. } auto.
-Qed.
-
-Lemma contractive2_subst : forall g sigma,contractive2 g -> (forall n, contractive2 (sigma n)) -> contractive2 g [g sigma].
-Proof. 
-elim;rewrite /=;intros;try done. 
-asimpl. split_and. 
-apply/guarded_sig2.
-instantiate (1 := (var 0 .: var >>  ⟨g ↑ ⟩)).  asimpl. done.
-case. done. simpl. intros. apply/guarded_fv. asimpl. apply/inotin. done.
-apply H. done.  intros. destruct n.  done. simpl. asimpl.  apply/contractive2_ren. done. done. done.
-apply H. done.  intros. done. 
-rewrite all_map. apply/allP. intro. intros. simpl. apply H. done. apply (allP H0). done. done.
-Qed.
-
-
-(*Lemma testtest2 : forall g sigma,contractive2 g -> (forall n, contractive2 (sigma n)) -> (forall n, guarded 0 (sigma n) \/ sigma n = var n) -> contractive2 g [g sigma].
-Proof. 
-elim;rewrite /=;intros;try done. 
-asimpl. split_and. 
-
-apply/guarded_subst2. done. intros. destruct n. done. asimpl. 
-specialize H2 with n. destruct H2. 
-apply/guarded_ren. done. done. 
-rewrite H2. asimpl. done. done.
-apply H. done.  intros. destruct n.  done. simpl. asimpl.  apply/contractive2_ren. done. done. done.
-intros.  destruct n. auto. 
-simpl. asimpl. 
-specialize H2 with n.  destruct H2. left. apply/guarded_ren. done. done.
-right. rewrite H0. simpl. done.
-apply H.  done.  done.  done.
-rewrite all_map. apply/allP. intro. intros. simpl. apply H. done. apply (allP H0). done. done.
-done. 
-Qed.*)
-
-
-(*Lemma testtest2 : forall g sigma,contractive2 g -> (forall n, contractive2 (sigma n)) -> (forall n, guarded 0 (sigma n) \/ sigma n = var n) -> contractive2 g [g sigma].
-Proof.
-elim;rewrite /=;intros;try done. 
-asimpl. split_and. 
-
-apply/guarded_subst2. done. intros. destruct n. done. asimpl. 
-specialize H2 with n. destruct H2. 
-apply/guarded_ren. done. done. 
-rewrite H2. asimpl. done. done.
-apply H. done.  intros. destruct n.  done. simpl. asimpl.  apply/contractive2_ren. done. done. done.
-intros.  destruct n. auto. 
-simpl. asimpl. 
-specialize H2 with n.  destruct H2. left. apply/guarded_ren. done. done.
-right. rewrite H0. simpl. done.
-apply H.  done.  done.  done.
-rewrite all_map. apply/allP. intro. intros. simpl. apply H. done. apply (allP H0). done. done.
-done. 
-Qed.*)
-
-(*Lemma testtest2 : forall g sigma i, bound_i i g -> contractive2 g -> (forall n, contractive2  (sigma n)) -> (forall n, if i <= n then sigma n = var n else bound_i i (sigma n)) -> contractive2 g [g sigma].
-Proof.
-elim;rewrite /=;try done;intros.
-split_and. asimpl. apply/guarded_subst. done. intros.
-destruct n. done.  simpl. asimpl. apply/guarded_fv.  apply/negP. move=> HH. 
-apply fv_shift in HH. rewrite gType_fv_ren. apply/bound_guard. 
-asimpl. apply :H.  eauto. done. 
-intros. destruct n. done. simpl. asimpl. apply/testtest. auto.
-specialize H3 with n. auto.  
-intros. case_if. destruct n. simpl. done. simpl. asimpl. 
-specialize H3 with n. have : i <= n by lia. move => HH. rewrite HH in H3. rewrite H3. asimpl. done. 
-simpl. 
-destruct n. simpl. rewrite H in H3. move : H3. case_if. done. auto. 
-intros. 
-
-have : 0 = (var 0 .: sigma >> ⟨g ↑ ⟩) 0.
-apply : guarded_shift.  destruct n.  done.  simpl.
-apply/guarded_ren. intros. destruct n0. done.  done. done. 
-apply H.  done. intros. asimpl.  destruct n.  done. simpl. 
-asimpl. apply/testtest. auto.  auto. 
-intros. asimpl. destruct n. simpl.
-rewrite all_map. apply/allP. intro. intros. simpl. apply H. done. apply (allP H0).  done.
-auto.
-
-
- done. 
-asimpl.  apply : H.  done. 
-intros. destruct n.  simpl. *)
-
-
-Lemma mu_height_ren : forall g sigma, mu_height g ⟨g sigma ⟩  = mu_height g.
-Proof.
-elim;rewrite /=;try done;intros.
-f_equal. apply : H. 
-Qed.
-
-(*Lemma contractive_mu_height : forall g0 g1 i, contractive_i (S i) g0 -> mu_height (substitution i g0 g1) = mu_height g0.
-Proof. 
-induction g0; try solve [by rewrite /=].
-- rewrite /=. intros. case : (eqVneq v i) H. move=>->. by rewrite ltnn. by rewrite /=. 
-- intros. rewrite /=. f_equal. apply IHg0. move : H. by rewrite /=.
-Qed.*)
-
-Lemma mu_height_subst : forall g0 sigma i,  (forall n, n <= i -> guarded  i g0) -> (forall n, n != i -> mu_height (sigma n) = 0) -> contractive2 g0 -> mu_height (g0[g sigma]) = mu_height g0.
-Proof. 
-elim; try solve [by rewrite /=];intros.
-- asimpl. simpl in H. rewrite H0. done. apply : H. instantiate (1:=0). eauto. 
-simpl. f_equal. asimpl. apply H with (i:=i.+1). 2 : { intros. destruct n. simpl. done. simpl. asimpl.
-rewrite mu_height_ren. apply H1. lia.  } intros. apply : H0. instantiate (1:=0).  eauto. simpl in H2. split_and.
-Qed. 
-
-Definition mu_height_subst0 g0 sigma :=  (@mu_height_subst g0 sigma 0).
-
-Lemma act_ofg_unf : forall g, contractive2 g  -> guarded 0 g -> act_ofg (GRec g) = act_ofg g [gGRec g .: var].
-Proof.
-intros.
-rewrite /act_ofg /= /full_unf /= mu_height_subst0.
-rewrite -iterS iterSr. rewrite /=. done. auto. case. done. done.
-done.
-Qed.
-
-Lemma nextg_unf : forall g, contractive2 g -> guarded 0 g -> nextg (GRec g) = nextg g [gGRec g .: var].
-Proof.
-intros.
-rewrite /nextg /= /full_unf /= mu_height_subst0.
-rewrite -iterS iterSr. rewrite /=. done. auto. case. done. done.
-done.
-Qed.
 
 Lemma TrP1 : forall s g, Tr s g -> contractive2 g ->  new_tr s g.
 Proof.
 move => s g.
 elim;auto;intros;simpl.
 - rewrite eqxx /=. asimpl. rewrite H0 //=. 
-- rewrite eqxx /=. rewrite /nextg /=.  apply/has_nthP. exists n. done.  apply : H1.  
+- rewrite eqxx /=. rewrite /next /=.  apply/has_nthP. exists n. done.  apply : H1.  
   simpl in H2. apply (allP H2). apply/mem_nth. done.
 - have :  contractive2 g0 [gGRec g0 .: var]. 
   apply/contractive2_subst. simpl in H1. split_and. case. done. intros. done. move/H0. 
   simpl. simpl in H1.
-  destruct aa. done. simpl. split_and.  rewrite act_ofg_unf //=. rewrite nextg_unf //=. 
+  destruct aa. done. simpl. split_and.  rewrite act_of_unf //=. rewrite next_unf //=. 
 Qed.
 
 Lemma TrP2 : forall s g, contractive2 g -> new_tr s g -> Tr s g.
@@ -1002,9 +281,9 @@ Proof.
 elim;auto;intros;simpl.
 remember (mu_height g). 
 move : n g Heqn H0 H1. 
-elim. intros. destruct g;try done; simpl in H1; split_and; move : H2;rewrite /act_ofg /=; move/eqP; case; intros;
+elim. intros. destruct g;try done; simpl in H1; split_and; move : H2;rewrite /act_of /=; move/eqP; case; intros;
 subst. constructor. apply H. destruct (orP H3);try done. destruct (orP H3);try done.
-rewrite /nextg /= in H3. 
+rewrite /next /= in H3. 
 destruct (hasP H3). move : H1. move/nthP=>HH. specialize HH with GEnd. 
 destruct HH. econstructor. eauto. apply H. simpl in H0. apply (allP H0). apply/mem_nth. done. 
 rewrite -H4 in H2. apply : H2. 
@@ -1014,7 +293,7 @@ constructor. apply H0. rewrite mu_height_subst0. simpl in Heqn. inversion Heqn. 
 intros. simpl in H1. split_and. intros. destruct n0. done. done. simpl in H1. split_and. 
 apply/contractive2_subst. simpl in H1. split_and.
 case;try done.
-move : H2. simpl in H1.  split_and. move : H2. rewrite /= act_ofg_unf //=. rewrite nextg_unf //=. 
+move : H2. simpl in H1.  split_and. move : H2. rewrite /= act_of_unf //=. rewrite next_unf //=. 
 Qed.
 
 Lemma TrP : forall s g, contractive2 g -> Tr s g <-> new_tr s g.
@@ -1023,12 +302,12 @@ intros. split;auto using TrP1,TrP2.
 Qed.
 
 
-Lemma bisim_tr : forall s g0 g1, bisimilarg g0 g1 -> new_tr s g0 = new_tr s g1.
+Lemma bisim_tr : forall s g0 g1, bisimilar g0 g1 -> new_tr s g0 = new_tr s g1.
 Proof. 
 elim;intros. done.
 simpl. punfold H0. inversion H0. subst. rewrite H1. f_equal. 
 clear H1 H0.
-remember (nextg g0). remember (nextg g1). clear g0 Heql0 g1 Heql1.  
+remember (next g0). remember (next g1). clear g0 Heql0 g1 Heql1.  
 elim  : l0 l1 H2 H3.
 -  case;intros.
  * done. 
@@ -1040,48 +319,37 @@ elim  : l0 l1 H2 H3.
 Qed.
 
 
-Lemma bisim_Tr : forall s g0 g1, contractive2 g0 -> contractive2 g1 ->  bisimilarg g0 g1 -> Tr s g0 -> Tr s g1.
+Lemma bisim_Tr : forall s g0 g1, contractive2 g0 -> contractive2 g1 ->  bisimilar g0 g1 -> Tr s g0 -> Tr s g1.
 Proof. 
 intros. apply/TrP;try done. rewrite -(@bisim_tr _ _ _  H1).  apply/TrP. done. done. 
 Qed.
 
-(*Definition lnext (l : seq action) := if l is x::l' then l' else nil.
-Definition lhead (l : seq action) := if l is x::l' then Some x else None.
-
-Lemma bisim_act_aux : forall g g' l,  act_ofg g = lhead l -> g' \in (nextg g) -> Tr (lnext l) g' -> Tr l g.
-Proof.
-elim;intros;try done. 
-simpl in H. destruct l.  done. done. 
-simpl.
-2 : { inversion H0.  simpl in H0. destruct l. done.  inversion H0. constructor. apply : H. 
-move : H1. rewrite /nextg /= !inE. move/eqP. intros. subst. simpl in H. inversion H
-elim;simpl;try done;intros.
-constructor. rewrite /gsubst. move : H0. rewrite /nextg. asimpl. simpl. intros.
-constructor. *)
 
 
-Lemma bisim_sym: forall g0 g1,  bisimilarg g0 g1 -> bisimilarg g1 g0.
+Lemma bisim_sym: forall g0 g1,  bisimilar g0 g1 -> bisimilar g1 g0.
 Proof. 
 pcofix CIH. intros. punfold H0. inversion H0. pfold. subst.  constructor. rewrite H //=. rewrite H1 //=.
 move : H2. move/forallzipP=>Hzip. apply/forallzipP. done.
 intros. simpl in *. right. apply : CIH.
-suff :  upaco2 bisimilar_fg bot2 (nth GEnd (nextg g0) x0) (nth GEnd (nextg g1) x0).
+suff :  upaco2 bisimilar_f bot2 (nth GEnd (next g0) x0) (nth GEnd (next g1) x0).
 case. intros. punfold a. pfold. eauto.
 case. apply : Hzip. done. rewrite H1. done.
 Qed.
 
-Lemma step_contractive : forall g l g', step g l g' -> contractive2 g.
-Proof. move => g l g'. elim;try done.
-intros. simpl. move : H1. move/forallzipP=>Hzip. simpl in Hzip. apply/allP. intro. move/nthP=>HH. 
+
+(*Lemma step_contractive : forall g l g', step g l g' -> contractive2 g.
+Proof. move => g l g'. elim;try done;intros. simpl. cc.  simpl. cc.
+move : H1. move/forallzipP=>Hzip. simpl in Hzip. apply/allP. intro. move/nthP=>HH. 
 specialize HH with GEnd. destruct HH. rewrite -H3. apply Hzip. repeat constructor. done. done. 
+cc.
 Qed.
 
 Lemma step_contractive2 : forall g l g', step g l g' -> contractive2 g'.
 Proof. move => g l g'. elim;try done.
-intros. apply (allP H).  apply/mem_nth. done. 
+intros. cc. intros. have : all contractive2 gs. cc. intros. apply (allP x).  cc. 
 intros. simpl. move : H1. move/forallzipP=>Hzip. simpl in Hzip. apply/allP. intro. move/nthP=>HH. 
 specialize HH with GEnd. destruct HH. rewrite -H3. apply Hzip. repeat constructor. done. rewrite H. done. 
-Qed.
+Qed.*)
 
 Lemma step_tr_in : forall g vn g', step g vn g' -> forall s, Tr s g' -> Tr s g \/ exists n, Tr (insert s n vn.1) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) (take n s).
 Proof.
@@ -1089,10 +357,10 @@ move => g vn g'. rewrite /insert. elim.
 - intros. right. exists 0. simpl. rewrite take0 drop0 /=.  auto. 
 - intros. right. exists 0. simpl. rewrite take0 drop0 /=. eauto.  
 - intros. destruct s;auto. 
-  inversion H2. subst. move : (H0 _ H4)=>[];auto.
+  inversion H3. subst. move : (H1 _ H5)=>[];auto.
   move=> [] n [].  intros. right. exists n.+1. simpl. auto. 
 - intros. destruct s; auto.
-  inversion H3. subst. move : H1. move/forallzipP=>Hzip. simpl in Hzip. rewrite -H in H7. 
+  inversion H4. subst. move : H2. move/forallzipP=>Hzip. simpl in Hzip. rewrite -H0 in H8. 
   specialize Hzip with d d n s.
 have :  Tr s (nth d gs n) \/
          (exists n0 : fin,
@@ -1100,10 +368,10 @@ have :  Tr s (nth d gs n) \/
             Forall (fun a : action => ptcp_to a \notin l.1) (take n0 s)).
 apply : Hzip;try done.
 case;intros. left. econstructor. eauto. eauto. destruct b. right. 
-exists x.+1. split;simpl;try done. econstructor. eauto. destruct H1. eauto. destruct H1. eauto.
-- intros. destruct (@H3 _ H4). left.   apply/bisim_Tr. 3 : { apply/bisim_sym. eauto. } done. done. done. 
+exists x.+1. split;simpl;try done. econstructor. eauto. destruct H2. eauto. destruct H2. eauto.
+- intros. destruct (@H3 _ H4). left.   apply/bisim_Tr. 3 : { apply/bisim_sym. eauto. } cc. cc. cc. 
  right. destruct H5. exists x. destruct H5. split;auto.
-  apply/bisim_Tr. 4 : { eauto. } all: try done. apply/bisim_sym. eauto. 
+  apply/bisim_Tr. 4 : { eauto. } all: try done. cc. cc. apply/bisim_sym. eauto. 
 Qed.
 
 
@@ -1164,20 +432,6 @@ move => a l l1. rewrite cat_cons. case : l;first done.
 move => a0 l. rewrite cat_cons. rewrite -cat_cons. rewrite cat_path. by move/andP=>[]. 
 Qed.
 
-
-(*Lemma in_action_from' : forall p0 p1 c, p0 \in Action p0 p1 c.
-Proof. intros.  rewrite !inE. by rewrite /in_mem /= eqxx. Qed.
-
-Lemma in_action_to' : forall p0 p1 c, p1 \in Action p0 p1 c.
-Proof. intros. rewrite !inE.  by rewrite /in_mem /= orbC eqxx. Qed.*)
-
-(*Lemma in_action_from : forall a, ptcp_from a \in a.
-Proof. intros. destruct a. rewrite /=. rewrite in_action_from' //=. Qed.
-
-Lemma in_action_to : forall a, ptcp_to a \in a.
-Proof. intros. destruct a. rewrite /=. rewrite in_action_to' //=. Qed.*)
-
-(*Hint Resolve in_action_from in_action_to in_action_from' in_action_to'.*)
 
 Lemma IO_in_action : forall a0 (l : action), IO a0 l -> (ptcp_to a0) \in l.
 Proof.
