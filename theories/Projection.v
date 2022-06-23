@@ -19,8 +19,7 @@ match g with
                                else if p == (ptcp_to a) then EMsg Rd (action_ch a) u (project g0 p) else project g0 p
 | GBranch a gs => if p == (ptcp_from a) then EBranch Sd (action_ch a) (map (fun g => project g p) gs)
                                 else if p == (ptcp_to a) then EBranch Rd (action_ch a) (map (fun g => project g p) gs) else if gs is g'::gs' then project g' p else EEnd
-| GRec g => if (project g p) == EVar 0 then EEnd 
-            else   ERec( project g p)
+| GRec g => if eguarded 0 (project g p) then ERec (project g p) else EEnd 
 | GVar n => EVar n
 end.
 
@@ -34,12 +33,12 @@ Qed.
 Lemma big_exists : forall (A : eqType) (B : choiceType) (l : seq A) (f0 : A -> {fset B}) p, p \in \bigcup_(j <- l) (f0 j) = has (fun x => p \in f0 x) l. 
 Proof. 
 move => A B. elim. move => f0 p. rewrite big_nil. done. intros. simpl. rewrite big_cons !inE. destruct ( (p \in f0 a) ) eqn:Heqn;rewrite /=. 
-done.
+ done.
 apply H.
 Qed.
 
 
-Lemma project_ren : forall g p sigma, project (g ⟨ sigma ⟩) p = (project g p) ⟨ sigma ⟩.
+(*Lemma project_ren : forall g p sigma, project (g ⟨ sigma ⟩) p = (project g p) ⟨ sigma ⟩.
 Proof.
 elim;intros.
 - simpl. done.
@@ -83,7 +82,7 @@ apply H. done.
  f_equal. rewrite -!map_comp. apply/eq_in_map=>l'. intros. simpl.
 apply H. done. 
 rewrite !match_n. induction l. done. simpl. apply H. auto. 
-Qed.
+Qed.*)
 
 
 Definition fset_ptcp := {fset ptcp}.

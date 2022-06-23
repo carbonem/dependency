@@ -213,14 +213,19 @@ Notation gpred := (lpreds (linear::contractive2::(bound_i 0)::rec_pred)).
 Notation epred := (lpreds (econtractive2::(ebound_i 0)::esize_pred::nil)).
 
 
-
 Unset Elimination Schemes. 
 Inductive step : gType -> label  -> gType -> Prop :=
  | GR1 (a : action) u g : gpred (GMsg a u g) -> step (GMsg a u g) (a, inl u) g
  | GR2 a n gs : gpred (GBranch a gs) -> n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
  | GR3 a u l g1 g2 : gpred (GMsg a u g1) -> step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
  | GR4 a l gs gs' : gpred (GBranch a gs) -> size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
- | GR_rec g l g' g'' :  gpred g -> gpred g'' -> bisimilar g g'' -> step g'' l g'  -> step g l g'. (*Add contractiveness assumption on g'' because we cant derive contractiveness of g'' from g : counter example : bisimilar a.end and a.(mu. 0) but the second is not contractive*)
+ | GR_rec g l g' g'' :  gpred g -> gpred g'' -> 
+                        bisimilar g g'' -> 
+                        step g'' l g'  -> step g l g'.
+
+
+
+ (*Add contractiveness assumption on g'' because we cant derive contractiveness of g'' from g : counter example : bisimilar a.end and a.(mu. 0) but the second is not contractive*)
 Set Elimination Schemes. 
 Hint Constructors step. 
 
@@ -351,7 +356,8 @@ intros. simpl. move : H1. move/forallzipP=>Hzip. simpl in Hzip. apply/allP. intr
 specialize HH with GEnd. destruct HH. rewrite -H3. apply Hzip. repeat constructor. done. rewrite H. done. 
 Qed.*)
 
-Lemma step_tr_in : forall g vn g', step g vn g' -> forall s, Tr s g' -> Tr s g \/ exists n, Tr (insert s n vn.1) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) (take n s).
+Lemma step_tr_in : forall g vn g', step g vn g' -> forall s, Tr s g' -> 
+Tr s g \/ exists n, Tr (insert s n vn.1) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) (take n s).
 Proof.
 move => g vn g'. rewrite /insert. elim.
 - intros. right. exists 0. simpl. rewrite take0 drop0 /=.  auto. 
