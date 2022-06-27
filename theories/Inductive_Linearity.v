@@ -219,9 +219,10 @@ Inductive step : gType -> label  -> gType -> Prop :=
  | GR2 a n gs : gpred (GBranch a gs) -> n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
  | GR3 a u l g1 g2 : gpred (GMsg a u g1) -> step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
  | GR4 a l gs gs' : gpred (GBranch a gs) -> size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
- | GR_rec g l g' g'' :  gpred g -> gpred g'' -> 
+ | GR_rec g l g' : gpred (GRec g) -> step g[g (GRec g).: var] l g'  -> step (GRec g) l g'.
+(* | GR_rec g l g' g'' :  gpred g -> gpred g'' -> 
                         bisimilar g g'' -> 
-                        step g'' l g'  -> step g l g'.
+                        step g'' l g'  -> step g l g'.*)
 
 
 
@@ -243,7 +244,7 @@ Lemma step_ind
         Forall (fun p => step p.1 l p.2) (zip gs gs') ->  Forall (fun p => P p.1 l p.2) (zip gs gs') -> 
 
         ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
-       (forall g l g' g'', gpred g -> gpred g'' -> bisimilar g g'' -> step g'' l g' -> P g'' l g' -> P g l g') ->
+       (forall g l g', gpred (GRec g) ->  step g[g (GRec g).: var] l g'  -> P g[g (GRec g).: var] l g' -> P (GRec g) l g') ->
        forall (s : gType) (l : label) (s0 : gType), step s l s0 -> P s l s0.
 Proof.
 move => P H0 H1 H2 H3 H4. fix IH 4.
@@ -252,7 +253,7 @@ intros. apply H0;auto.
 intros. apply H1;auto.
 intros. apply H2;auto.
 intros. apply H3;auto. elim : f;auto.  
-intros. apply : H4;auto. all : eauto. 
+intros. apply : H4;auto.
 Qed.
 
 Require Import Paco.paco.
@@ -375,9 +376,10 @@ have :  Tr s (nth d gs n) \/
 apply : Hzip;try done.
 case;intros. left. econstructor. eauto. eauto. destruct b. right. 
 exists x.+1. split;simpl;try done. econstructor. eauto. destruct H2. eauto. destruct H2. eauto.
-- intros. destruct (@H3 _ H4). left.   apply/bisim_Tr. 3 : { apply/bisim_sym. eauto. } cc. cc. cc. 
- right. destruct H5. exists x. destruct H5. split;auto.
-  apply/bisim_Tr. 4 : { eauto. } all: try done. cc. cc. apply/bisim_sym. eauto. 
+- intros. destruct (@H1 _ H2). left. destruct s.   done. constructor. done.
+
+
+ destruct H3. right. exists x. destruct H3. split;auto.
 Qed.
 
 
