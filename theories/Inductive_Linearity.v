@@ -219,7 +219,8 @@ Inductive step : gType -> label  -> gType -> Prop :=
  | GR2 a n gs : gpred (GBranch a gs) -> n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
  | GR3 a u l g1 g2 : gpred (GMsg a u g1) -> step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
  | GR4 a l gs gs' : gpred (GBranch a gs) -> size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
- | GR_rec g l g' : gpred (GRec g) -> step g[g (GRec g).: var] l g'  -> step (GRec g) l g'.
+ | GR_rec g l g' : gpred (GRec g) -> step g[g (GRec g).: var] l g'  -> 
+                   step (GRec g) l g'.
 (* | GR_rec g l g' g'' :  gpred g -> gpred g'' -> 
                         bisimilar g g'' -> 
                         step g'' l g'  -> step g l g'.*)

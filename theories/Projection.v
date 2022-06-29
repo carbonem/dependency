@@ -76,47 +76,62 @@ Qed.
 
 Definition emu_height_subst0 g0 sigma :=  (@emu_height_subst g0 sigma 0).
 Require Import Program.
+
+
+Show Obligation Tactic.
+
+Obligation Tactic := program_simpl ; try solve [ constructor;lia | simpl in *;constructor; apply/ltP; apply in_fold;apply : in2;apply/inP |
+constructor 2;split_and;rewrite /= emu_height_subst0; (try lia); (try done);case; simpl in *; done
+]; try done.
+
 Check dec. 
-Equations unfeq (e0 e1 : endpoint) : bool by wf (esize e1,emu_height e0) ((Equations.Prop.Subterm.lexprod _ _ lt lt)) := {
+
+
+Fixpoint is_mue e :=
+match e with
+| ERec e' => is_mue e'
+| EEnd => true
+| _ => false 
+end.
+
+
+Equations unfeq (e0 e1 : endpoint) : bool by wf (esize e1,emu_height e0) 
+              ((Equations.Prop.Subterm.lexprod _ _ lt lt)) := {
 unfeq (EVar n0) (EVar n1) =>  n0 == n1; 
-unfeq  EEnd EEnd => true;
-unfeq (EMsg d0 c0 v0 e0') (EMsg d1 c1 v1 e1') => (d0 == d1) && (c0 == c1) && (v0 == v1) && (unfeq e0' e1' );
-unfeq (EBranch d0 c0 es0) (EBranch d1 c1 es1) => (d0 == d1) && (c0 == c1) && ((foldIn (zip es0 es1) (fun x b H => b && (unfeq x.1 x.2)) true));
-unfeq (ERec e0') (ERec e1') => unfeq e0' e1';
+unfeq EEnd e => is_mue e;
+unfeq (EMsg d0 c0 v0 e0') (EMsg d1 c1 v1 e1') => (d0 == d1) && (c0 == c1) && (v0 == v1) && ((unfeq e0' e1' )) ;
+unfeq (EBranch d0 c0 es0) (EBranch d1 c1 es1) => (d0 == d1) && (c0 == c1) && ((foldIn (zip es0 es1) (fun x b H => b && ((unfeq x.1 x.2) ) ) true));
 unfeq (ERec e0') e1 with (dec (econtractive2 (ERec e0'))) => {
+  unfeq (ERec e0') (ERec e1') (left _) => unfeq e0' e1' ||  ((unfeq (e0' [e (ERec e0').:ids]) (ERec e1')));
+  unfeq (ERec e0') e1 (left _) =>  ((unfeq (e0' [e (ERec e0').:ids]) e1)); 
+  unfeq _ _ (right _) => false
+ };
+
+(*  => {
+unfeq (ERec e0') e1 with (dec (econtractive2 (ERec e0'))) => {
+  unfeq (ERec e0') (ERec e1') (left _) => (unfeq e0' e1') || (unfeq (e0' [e (ERec e0').:ids]) (ERec e1'));
   unfeq (ERec e0') e1 (left _) =>  unfeq (e0' [e (ERec e0').:ids]) e1;
-  unfeq _ _ (right _) => false };
+  unfeq _ _ (right _) => false };*)
+
 unfeq _ _ => false}.  
 Next Obligation.
-constructor. clear unfeq. lia. Qed. 
-Next Obligation.
-simpl in *. constructor.
-apply/ltP. move : H. move/inP/in2. 
-intros. apply in_fold. done. Qed.
-Next Obligation.
-constructor 2. split_and. rewrite /= emu_height_subst0. lia.   done. case. done. simpl in *. done.
-done. Qed.
+simpl in *;constructor; apply/ltP; apply in_fold;apply : in2;apply/inP. apply H. Qed.
+Next Obligation. Qed.
+Next Obligation. Qed.
+Next Obligation. Qed.
+Next Obligation. Qed.
+Next Obligation. Qed.
 
-Next Obligation.
-constructor 2. split_and. rewrite /= emu_height_subst0. lia.   done. case. done. simpl in *. done. done.
-Qed.
-Next Obligation.
-constructor 2. split_and. rewrite /= emu_height_subst0. lia.   done. case. done. simpl in *. done. done.
-Qed.
-Next Obligation.
-constructor 2. split_and. rewrite /= emu_height_subst0. lia.   done. case. done. simpl in *. done. done.
-Qed.
-Next Obligation.
-constructor. lia. 
-Qed.
 
- 
+
+
+
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Let inE := NewSyntax.inE.
-
 
 
 Fixpoint project g p := 
@@ -126,7 +141,7 @@ match g with
                                else if p == (ptcp_to a) then EMsg Rd (action_ch a) u (project g0 p) else project g0 p
 | GBranch a gs => if p == (ptcp_from a) then EBranch Sd (action_ch a) (map (fun g => project g p) gs)
                                 else if p == (ptcp_to a) then EBranch Rd (action_ch a) (map (fun g => project g p) gs) else if gs is g'::gs' then project g' p else EEnd
-| GRec g => if eguarded 0 (project g p) then ERec (project g p) else EEnd 
+| GRec g => if eguarded 0 (project g p) then ERec (project g p) else EEnd
 | GVar n => EVar n
 end.
 
@@ -179,6 +194,97 @@ intros. split;intros; eauto using eguarded_shift1, eguarded_shift2.
 Qed.
 
 
+Lemma eguarded_fv2 : forall g v, eguarded v g = false -> endpoint_fv g = [fset v]. 
+Proof.
+elim;rewrite /=;try done;intros. have : n = v.  lia.  move=>->.  done.
+erewrite H. 2 : { eauto.  } apply/fsetP.  move => k. rewrite /= !inE. 
+
+Search _ ( (_ <-> _) -> (_ = _)). apply Bool.eq_true_iff_eq. split.  
+move/imfsetP=> []. simpl in *. move => x. rewrite /= !inE. split_and. subst. rewrite /= (eqP H1). simpl in *. rewrite /= eqxx. done. 
+move/eqP. move=>->.  apply/imfsetP. simpl in *. exists v.+1.  rewrite /= !inE. split_and. done.
+Qed. 
+
+
+
+Lemma inj_rem4 : forall e  f f' , 
+(forall v, v \in endpoint_fv e -> f v = f' v) -> e ⟨e f⟩  = e ⟨e f'⟩ .
+Proof.  
+elim;intros.
+- asimpl. rewrite H.  done. rewrite /= !inE //=. done.
+asimpl. f_equal.  apply H.  intros. destruct v. done. asimpl. rewrite H0. done. 
+simpl. apply/imfsetP. exists v.+1. simpl. rewrite !inE. split_and. done. asimpl. f_equal. apply H. auto. 
+asimpl. f_equal. apply/eq_in_map. move => g. intros. apply H. done. intros.  apply H0.
+simpl. rewrite big_map. rewrite big_exists. apply/hasP. exists g. done. done.
+Qed.
+
+Lemma inj_rem5 : forall e  f f' v , 
+ e ⟨e f⟩  = e ⟨e f'⟩ ->  f v <> f' v -> v \notin endpoint_fv e.
+Proof.  
+elim;intros;rewrite /= ?inE;try done. move : H. asimpl. case. intros. destruct (eqVneq v n). subst. done. done. 
+move : H0. asimpl. case. move/H=>HH. apply/negP. move/imfsetP=>[] x /=. rewrite !inE. split_and. 
+specialize HH with v.+1.  move : HH. asimpl. move => HH. have : (f v).+1 <> (f' v).+1. move => H'. inversion H'. apply H1. 
+done.  move/HH. subst. simpl. destruct x. done. simpl. simpl in *. rewrite H0 //=. 
+apply: H. move : H0. asimpl. case. eauto. eauto.
+rewrite big_map big_exists. move : H0. asimpl. case. move/eq_in_map=>HH.
+apply/negP.  move/hasP=>[] x. intros. apply/negP. apply  H with (f:=f)(f':=f'). all : eauto. 
+Qed.
+
+
+Lemma inj_rem4' : forall e  f f' , 
+(forall v, v \in endpoint_fv e -> f v = f' v) -> e [e f]  = e [e f'] .
+Proof.  
+elim;intros.
+- asimpl. rewrite H.  done. rewrite /= !inE. done.
+done. asimpl. f_equal.  apply H.  intros. destruct v. done. asimpl. rewrite H0. done. 
+simpl. apply/imfsetP. exists v.+1. simpl. rewrite !inE. split_and. done. asimpl. f_equal. apply H. auto. 
+asimpl. f_equal. apply/eq_in_map. move => g. intros. apply H. done. intros.  apply H0.
+simpl. rewrite big_map. rewrite big_exists. apply/hasP. exists g. done. done.
+Qed.
+
+
+Lemma inj_rem : forall e0 e1 f f', injective f  -> e0 ⟨e f⟩ = e1 ⟨e f⟩ -> e0 ⟨e f' ⟩ = e1 ⟨e f' ⟩.
+Proof. 
+elim. intros. destruct e1;try done.  f_equal. move : H0. asimpl. case. move/H. by move=>->. 
+- case;try done.
+- intros. asimpl.  destruct e1;try done. f_equal. move : H1.  asimpl. intros. f_equal. 
+  apply : H. have : injective (0 .: f >> succn ).
+  intro. intros. destruct x1;destruct x2. done. move : H.  asimpl.
+done.  move : H. asimpl. done. f_equal. move : H. asimpl. case. move/H0. done. move => HH. apply : HH. 
+
+(*intro. intros. destruct x1;destruct x2. done. move : H.  asimpl.
+done.  move : H. asimpl. done. f_equal. move : H. asimpl. case. move/H1. done. *)
+  move : H1.  asimpl. case. intros. eauto.
+- intros. destruct e1;try done.
+ move : H1.  asimpl. case. intros.  subst. f_equal. eauto. 
+- intros. move : H1.  asimpl. destruct e1;try done. asimpl. case. intros. subst. f_equal.
+  move : H3. elim : l l0 H;simpl. destruct l0. done. done. destruct l0. done. 
+  simpl. intros. f_equal. apply : H1. auto. eauto. inversion H3. done.  apply H. 
+  intros. apply : H1. eauto. eauto. eauto.  inversion H3. eauto. 
+Qed.
+
+
+Lemma inj_rem2 : forall e0 e1 f , injective f  -> e0 ⟨e f⟩ = e1 ⟨e f⟩ -> e0 = e1.
+Proof. intros. have : e0 = e0 ⟨id⟩.  asimpl. done. move=>->. 
+have : e1 = e1 ⟨id⟩. asimpl. done. move=>->. apply/inj_rem. eauto. eauto.
+Qed.
+
+
+
+Lemma inj_rem5' : forall e  f f' v , 
+ e [e f]  = e [e f'] ->  f v <> f' v -> v \notin endpoint_fv e.
+Proof.  
+elim;intros;rewrite /= ?inE;try done. move : H. asimpl. case. intros. destruct (eqVneq v n). subst. done. done. 
+move : H0. asimpl. case. move/H=>HH. apply/negP. move/imfsetP=>[] x /=. rewrite !inE. split_and. 
+specialize HH with v.+1.  move : HH. asimpl. move => HH. have :  (f v) ⟨e ↑ ⟩ <> (f' v) ⟨e ↑ ⟩.  
+ move => H'. apply inj_rem2 in H'. apply H1. done. intro. rewrite /shift.  intros. inversion H3. done. 
+move/HH. subst. simpl. destruct x. done. simpl. simpl in *. rewrite H0 //=. 
+apply: H. move : H0. asimpl. case. eauto. eauto.
+rewrite big_map big_exists. move : H0. asimpl. case. move/eq_in_map=>HH.
+apply/negP.  move/hasP=>[] x. intros. apply/negP. apply  H with (f:=f)(f':=f'). all : eauto. 
+Qed.
+
+
+
 Lemma project_ren : forall g p sigma, injective sigma ->  project (g ⟨ sigma ⟩) p = (project g p) ⟨ sigma ⟩.
 Proof.
 elim;intros.
@@ -188,8 +294,12 @@ elim;intros.
   * asimpl. case_if. done. have : 0 = (0.: sigma >> succn ) 0. done. intros. rewrite {1}x in H2.
     eapply eguarded_shift in H1. erewrite H1 in H2. done. apply inject2.  done. 
     case_if. have : 0 = (0.: sigma >> succn ) 0. done. intros. rewrite {1}x in H2. 
-    apply eguarded_shift in H2. rewrite H2 in H1. done. apply inject2. done. done. apply inject2.  done.
-- simpl in *. 
+    apply eguarded_shift in H2. rewrite H2 in H1. done. apply inject2. done. simpl in *. done.
+(*    f_equal.  asimpl. apply inj_rem4'. intros. apply eguarded_fv2 in H1.  rewrite /= H1 in H3. 
+    rewrite /= inE in H3.  rewrite /= (eqP H3). simpl in *. done.*)
+
+    apply inject2.  done.
+- simpl in *.
 rifliad;asimpl;try done. f_equal. auto.  f_equal. auto. auto.
 simpl. rifliad;asimpl;try done. f_equal. rewrite -!map_comp. apply/eq_in_map=>l'. intros. simpl.
 apply H. done.  done.
@@ -276,7 +386,12 @@ destruct n. done. asimpl. rewrite project_ren. apply eguarded_fv. apply inotine.
 intros. rewrite x in H2.  done.  case_if. 
 have : eguarded 0 (project g p) [e ids]. eapply eguarded_sig2. eauto. intros. destruct n.  simpl in *. done.
 simpl in *. done.
-  asimpl. intros. rewrite x in H1. done. done. apply inject_endsimpl. done.
+  asimpl. intros. rewrite x in H1. done. simpl in *. done. 
+(*f_equal. 
+
+ asimpl. apply inj_rem4'. intros. apply eguarded_fv2 in H1.  rewrite /= H1 in H3. 
+    rewrite /= inE in H3.  rewrite /= (eqP H3). simpl in *. done.*)
+ apply inject_endsimpl. done.
 simpl.
 rifliad;asimpl;try done. f_equal. auto.  f_equal. auto. auto.
 simpl. rifliad;asimpl;try done. f_equal. rewrite -!map_comp. apply/eq_in_map=>l'. intros. simpl.
@@ -285,6 +400,8 @@ apply H. done. done.
 apply H. done.  done.
 rewrite !match_n. induction l. done. simpl. apply H. auto. done.
 Qed.
+
+
 
 
 Definition fset_ptcp := {fset ptcp}.
@@ -353,6 +470,15 @@ Hint Constructors Subterm.lexprod : subterm_relation.
 Derive Signature for Acc.
 Notation lexicographic R S := (Subterm.lexprod _ _ R S).
 *)
+
+
+(*Fixpoint unfeq2 e0 e1 :=
+match e0,e1 with
+| EBranch d c es, EBranch d' c' es' => (d == d') || (c == c') || (list_eq unfeq2 es es')
+
+ unfeq e0 e1 || unfeq e1 e0.
+
+Definition unfeq2 e0 e1 := unfeq e0 e1 || unfeq e1 e0.*)
 
 
 Fixpoint project_pred  (g : gType):=  
@@ -544,86 +670,8 @@ rewrite /shiftdown.  *)
 
 
 
-(*Lemma inj_rem : forall e0 e1 f f', injective f  -> e0 ⟨e f⟩ = e1 ⟨e f⟩ -> e0 ⟨e f' ⟩ = e1 ⟨e f' ⟩.
-Proof. 
-elim. intros. destruct e1;try done.  f_equal. move : H0. asimpl. case. move/H. by move=>->. 
-- case;try done.
-- intros. asimpl.  destruct e1;try done. f_equal. move : H1.  asimpl. intros. f_equal. 
-  apply : H. have : injective (0 .: f >> succn ).
-  intro. intros. destruct x1;destruct x2. done. move : H.  asimpl.
-done.  move : H. asimpl. done. f_equal. move : H. asimpl. case. move/H0. done. move => HH. apply : HH. 
-
-(*intro. intros. destruct x1;destruct x2. done. move : H.  asimpl.
-done.  move : H. asimpl. done. f_equal. move : H. asimpl. case. move/H1. done. *)
-  move : H1.  asimpl. case. intros. eauto.
-- intros. destruct e1;try done.
- move : H1.  asimpl. case. intros.  subst. f_equal. eauto. 
-- intros. move : H1.  asimpl. destruct e1;try done. asimpl. case. intros. subst. f_equal.
-  move : H3. elim : l l0 H;simpl. destruct l0. done. done. destruct l0. done. 
-  simpl. intros. f_equal. apply : H1. auto. eauto. inversion H3. done.  apply H. 
-  intros. apply : H1. eauto. eauto. eauto.  inversion H3. eauto. 
-Qed.
 
 
-Lemma inj_rem2 : forall e0 e1 f , injective f  -> e0 ⟨e f⟩ = e1 ⟨e f⟩ -> e0 = e1.
-Proof. intros. have : e0 = e0 ⟨id⟩.  asimpl. done. move=>->. 
-have : e1 = e1 ⟨id⟩. asimpl. done. move=>->. apply/inj_rem. eauto. eauto.
-Qed.*)
-
-
-
-
-
-(*
-Lemma inj_rem4 : forall e  f f' , 
-(forall v, v \in endpoint_fv e -> f v = f' v) -> e ⟨e f⟩  = e ⟨e f'⟩ .
-Proof.  
-elim;intros.
-- asimpl. rewrite H.  done. rewrite /= !inE //=. done.
-asimpl. f_equal.  apply H.  intros. destruct v. done. asimpl. rewrite H0. done. 
-simpl. apply/imfsetP. exists v.+1. simpl. rewrite !inE. split_and. done. asimpl. f_equal. apply H. auto. 
-asimpl. f_equal. apply/eq_in_map. move => g. intros. apply H. done. intros.  apply H0.
-simpl. rewrite big_map. rewrite big_exists. apply/hasP. exists g. done. done.
-Qed.
-
-Lemma inj_rem5 : forall e  f f' v , 
- e ⟨e f⟩  = e ⟨e f'⟩ ->  f v <> f' v -> v \notin endpoint_fv e.
-Proof.  
-elim;intros;rewrite /= ?inE;try done. move : H. asimpl. case. intros. destruct (eqVneq v n). subst. done. done. 
-move : H0. asimpl. case. move/H=>HH. apply/negP. move/imfsetP=>[] x /=. rewrite !inE. split_and. 
-specialize HH with v.+1.  move : HH. asimpl. move => HH. have : (f v).+1 <> (f' v).+1. move => H'. inversion H'. apply H1. 
-done.  move/HH. subst. simpl. destruct x. done. simpl. simpl in *. rewrite H0 //=. 
-apply: H. move : H0. asimpl. case. eauto. eauto.
-rewrite big_map big_exists. move : H0. asimpl. case. move/eq_in_map=>HH.
-apply/negP.  move/hasP=>[] x. intros. apply/negP. apply  H with (f:=f)(f':=f'). all : eauto. 
-Qed.
-
-
-Lemma inj_rem4' : forall e  f f' , 
-(forall v, v \in endpoint_fv e -> f v = f' v) -> e [e f]  = e [e f'] .
-Proof.  
-elim;intros.
-- asimpl. rewrite H.  done. rewrite /= !inE. done.
-done. asimpl. f_equal.  apply H.  intros. destruct v. done. asimpl. rewrite H0. done. 
-simpl. apply/imfsetP. exists v.+1. simpl. rewrite !inE. split_and. done. asimpl. f_equal. apply H. auto. 
-asimpl. f_equal. apply/eq_in_map. move => g. intros. apply H. done. intros.  apply H0.
-simpl. rewrite big_map. rewrite big_exists. apply/hasP. exists g. done. done.
-Qed.
-
-Lemma inj_rem5' : forall e  f f' v , 
- e [e f]  = e [e f'] ->  f v <> f' v -> v \notin endpoint_fv e.
-Proof.  
-elim;intros;rewrite /= ?inE;try done. move : H. asimpl. case. intros. destruct (eqVneq v n). subst. done. done. 
-move : H0. asimpl. case. move/H=>HH. apply/negP. move/imfsetP=>[] x /=. rewrite !inE. split_and. 
-specialize HH with v.+1.  move : HH. asimpl. move => HH. have :  (f v) ⟨e ↑ ⟩ <> (f' v) ⟨e ↑ ⟩.  
- move => H'. apply inj_rem2 in H'. apply H1. done. intro. rewrite /shift.  intros. inversion H3. done. 
-move/HH. subst. simpl. destruct x. done. simpl. simpl in *. rewrite H0 //=. 
-apply: H. move : H0. asimpl. case. eauto. eauto.
-rewrite big_map big_exists. move : H0. asimpl. case. move/eq_in_map=>HH.
-apply/negP.  move/hasP=>[] x. intros. apply/negP. apply  H with (f:=f)(f':=f'). all : eauto. 
-Qed.
-
-*)
 
 
 
@@ -679,5 +727,6 @@ Lemma fv_project_eq : forall g p n, lpreds rec_pred g ->  (n \in fv_g g) = (n \i
 Proof. intros. destruct ( (n \in fv_g g)) eqn:Heqn. rewrite fv_project_in //=.
 destruct ((n \in fv (project g p))) eqn:Heqn2. erewrite fv_rproject_in in Heqn. done. eauto. done. 
 Qed.*)
+
 
 
