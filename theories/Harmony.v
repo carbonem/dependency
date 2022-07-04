@@ -1429,10 +1429,10 @@ Proof.
 intros. funelim (unfeq e e); try done; try rewrite -Heqcall.  inversion H0. lia. 
 inversion H1. subst. rewrite !eqxx /=.  apply H. simpl in *. done. f_equal. done.
 inversion H1. subst. rewrite !eqxx /=. clear Heqcall H1. elim : es0 H H0 . simpl in *.  simp foldIn. simpl in *.  
-intros. simp foldIn. simpl in *. split_and. apply H. intros.  apply : H0. 2 : {   eauto. }   
-constructor. auto.   done. apply :  Heqcall. done. apply : H0. 2 : {  left. eauto. } constructor.  done. f_equal. simpl in *. done. 
-inversion H1.  subst. simp unfeq. simpl in *.
-inversion H2. subst. rewrite /= H.   done. simpl in *. split_and. f_equal. done. 
+intros. simp foldIn. simpl in *. simp list_eq2. split_and. apply : H0. 4 : {  f_equal.   } auto.  auto. done.  done.  apply H.  
+
+intros.  apply : H0. 4 : {   eauto. }   auto.  auto.  done. done. done.
+rewrite /= eqxx. done.
 clear Heq.
 rewrite  H in e0. done. 
 Qed.
@@ -1511,12 +1511,7 @@ Lemma unfeq_unf : forall e e', econtractive2 (ERec e) -> unfeq (e [e (ERec e)..]
   unfeq (ERec e) e'.
 Proof.
 intros. funelim (unfeq (ERec e) e');try done. 
-rewrite -Heqcall. inversion H2.  done. 
-rewrite -Heqcall. inversion H2.  done. 
-rewrite -Heqcall. inversion H2.  done. 
-rewrite -Heqcall. inversion H2.  done.
-rewrite -Heqcall. 
-simpl in *. split_and. clear Heq. inversion H3. subst. rewrite /= H2. lia. 
+rewrite -Heqcall. inversion H2.  subst.  rewrite /= H1.  lia. 
 simpl in *. split_and. clear Heq. inversion H1. subst. rewrite /= H2 H3 in e0.
 done.
 Qed.
@@ -1631,176 +1626,235 @@ Check project_predP_aux.
 destruct gs. simpl in *. done. case : n . zdone.
 *)
 
-Lemma unfeq_end e : unfeq EEnd e -> is_mue e.
+Lemma unfeq_end e : unfeq EEnd e = is_mue e.
 Proof.
 intros. funelim (unfeq EEnd e);try done. 
 Qed. 
 
-Lemma unfeq_trans : forall e0 e1 e2, unfeq e0 e1 -> unfeq e1 e2 -> unfeq e0 e2.
+
+Lemma is_mue_fset0 : forall e,  is_mue e -> endpoint_fv e = fset0.
 Proof.
-intros. funelim (unfeq e0 e1);try done. 
-- move : H. simp unfeq. move/eqP. intros. subst.  done. 
--  apply unfeq_end in H. funelim (unfeq e e2);try done.  move : H1. simp unfeq. simpl in *. rewrite /= Heq. simpl in *.
-   
- rewrite /= Heqcall. 
-   simp unfeq. simpl in *. rewrite /= Heq. simpl in *.
-duction e;try done.  apply IHe. done. funelim (unfeq e e2); try done. apply H.   
-  move : H1. simp unfeq.  simpl in *. rewrite /= Heq. simpl in *.
-
-move : H.  funelim (unfeq EEnd e);try done.
-- apply H. simp unfeq. done. funelim (unfeq (ERec EEnd) e2);try done. 
-  move : H2. simp unfeq. case.  intros.  subst. move : H1. simp unfeq.  simpl in *. simp unfeq.
-  move : H2. simp unfeq. case.  intros.  subst. move : H1. simp unfeq.  simpl in *. simp unfeq.
-  move : H2. simp unfeq. case.  intros.  subst. move : H1. simp unfeq.  simpl in *. simp unfeq. 
-  move : H3. case. intros.  subst. move : H2. simpl in *. rewrite -Heqcall. move/orP. case. 
-  intros. funelim (unfeq EEnd e1');try done. simp unfeq. done.
-
-apply H0. done. done. simp unfeq. simpl in *. rewrite /= a. lia. f_equal. done.
-  funelim (unfeq EEnd e1');try done. simp unfeq. 
-simp unfeq.  simpl in *. simp unfeq.
-- 
-funelim (unfeq (EVar n1) e2).
-- funelim (unfeq (EVar n0) e1);try done. inversion H1.  subst . 
-  move : H H0. simp unfeq.   lia. 
-- funelim (unfeq (EVar n) e1);try done. funelim (unfeq (EVar n) e1);try done.
-- funelim (unfeq (EVar n) e1);try done. 
-- funelim (unfeq (EVar n) e1);try done; funelim (unfeq (EVar n) e1);try done.
-- all : try (funelim (unfeq (EVar n) e1);try done; funelim (unfeq (EVar n) e1);try done).
-- funelim (unfeq (EVar n) e2);try done. 
-
-
-- funelim (unfeq EEnd e1);try done. move : H1. simp unfeq. simpl in *. simp unfeq. 
-
-
-
-- funelim (unfeq EEnd e1);try done. move : H1. simp unfeq. simpl in *. simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e2);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- rewrite orbC /=. specialize H with (EVar 0). intros. 
-  suff : unfeq EEnd (ERec (ERec (EVar 0))). simp unfeq. 
-   apply H.  done.
-
-Lemma unfeq_trans : forall e0 e1 e2, unfeq e0 e1 -> unfeq e1 e2 -> unfeq e0 e2.
-Proof.
-intros. funelim (unfeq e0 e2);try done. 
-- funelim (unfeq (EVar n0) e1);try done. inversion H1.  subst . 
-  move : H H0. simp unfeq.   lia. 
-- funelim (unfeq (EVar n) e1);try done. funelim (unfeq (EVar n) e1);try done.
-- funelim (unfeq (EVar n) e1);try done. 
-- funelim (unfeq (EVar n) e1);try done; funelim (unfeq (EVar n) e1);try done.
-- all : try (funelim (unfeq (EVar n) e1);try done; funelim (unfeq (EVar n) e1);try done).
-- funelim (unfeq (EVar n) e2);try done. 
-
-
-- funelim (unfeq EEnd e1);try done. move : H1. simp unfeq. simpl in *. simp unfeq. 
-
-
-
-- funelim (unfeq EEnd e1);try done. move : H1. simp unfeq. simpl in *. simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e1);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- funelim (unfeq EEnd e2);try done; move : H1;simp unfeq;simpl in *;simp unfeq. 
-- rewrite orbC /=. specialize H with (EVar 0). intros. 
-  suff : unfeq EEnd (ERec (ERec (EVar 0))). simp unfeq. 
-   apply H.  done.
-. (  term+) case : e0;try done. 
-
-
-
-funelim (unfeq (EVar n) e1);try done.
-funelim (unfeq (EVar n) e1);try done.
-funelim (unfeq (EVar n) e1);try done. 
-  move : H H0. simp unfeq.   lia. 
--
-
-funelim (unfeq (EVar n0) e1);try done.
-
-
-
-move => e0 e1. elim : e1 e0 ;intros. 
-
-
-
-
-Lemma unfeq_trans : forall e0 e1 e2, unfeq e0 e1 -> unfeq e1 e2 -> unfeq e0 e2.
-Proof.
-move => e0 e1. elim : e1 e0 ;intros. 
-- case : e0 H H0. intro. 
- * case : e2. 
-  ** intro. simp unfeq. lia. 
-  ** simp unfeq. 
-  ** simp unfeq. move => t c v e. move => /eqP ->. done. 
-  ** simp unfeq.   move => d c l.  move => /eqP ->. done.
-  ** simp unfeq.   move => d.  move => /eqP ->. done.
-  ** simp unfeq.   done.
- * move => d c v e. case : e2.
-  ** move => n0. simp unfeq. 
-  ** simp unfeq. 
-  ** move => nn t dn vn y. simp unfeq. done.
-  ** move => dd nn ll. simp unfeq.   
-  ** move => n0. simp unfeq. done.
- * move => d c l. case : e2.
-  ** move => n0. simp unfeq. 
-  ** simp unfeq. 
-  ** move => n0. simp unfeq. done.
-  ** move => n0. simp unfeq. done.
-  ** move => n0. simp unfeq. done.
- * move => e. case : e2.
-  ** move => n0. simp unfeq. simpl in *. intros.  rewrite /= -(eqP H0). done.
-  ** simp unfeq. simpl in *. done.
-  ** simp unfeq. simpl in *. done.
-  ** simp unfeq. simpl in *. done.
-  ** move  => e0.  simp unfeq. simpl in *.  intros. exfalso. clear H. funelim (unfeq (EVar n) (ERec e0));try done. rewrite /= H0 in Heqcall. done. 
-     rewrite /= H0 in Heqcall. move : Heqcall. simp unfeq.  done.
-     rewrite /= H0 in Heqcall. move : Heqcall. simp unfeq.  done.
-     rewrite /= H0 in Heqcall. move : Heqcall. simp unfeq.  done.     
-     rewrite /= H0 in Heqcall. move : Heqcall. simp unfeq.  done.
- * case : e2 H H0.
- ** move => n.
-  *** case : e0.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. simp unfeq.  done.
- *** move => e. case : e0.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. simp unfeq.  done.
-   **** move => n0. admit. 
-
-   apply H
-simp unfeq.  simpl in *. intros. done.
-
-
-
-
-
-z
-
-*
-     apply : H. repeat  constructor. eauto. f_equal.  done. done.
-
-
-* move => d c l. case : e2.
-
-move => d c l e.  move => /eqP ->. done.
-
-
-move => d c l.  move => /eqP ->. done.
-
-intros. funeu
-
-intros.  funelim (unfeq e0 e2
 elim;intros.
-- funelim (unfeq e0 (EVar n)).
+simpl in *. done. 
+done.
+simpl in *. rewrite /= H. apply/fsetP=>k. 
+apply Bool.eq_true_iff_eq. split.  move/imfsetP.  case.  simpl in *. intros. rewrite /= inE in p. done.
+rewrite /= inE. done.
+done.
+simpl in *. done.
+simpl in *. done.
+Qed.
 
+Lemma subst_fset0 : forall e sigma, (forall n, n \in endpoint_fv e -> sigma n = EVar n) -> e [e sigma] = e.
+Proof.
+elim;intros;simpl in *. apply H. rewrite /= inE. done. done. 
+asimpl.  f_equal. apply H.  case. simpl in *. done. intros. simpl in *. asimpl. 
+rewrite /= H0.  simpl in *. done.
+apply/imfsetP. simpl in *. exists n.+1. rewrite /= !inE.  split_and. done. 
+f_equal. apply H.  done.
+f_equal. induction l.  done. simpl in *. f_equal. apply H.  done. intros. apply H0.
+rewrite big_cons inE. rewrite /= H1. lia. apply IHl.  intros. apply H. rewrite /= inE H1. lia. done. 
+intros. apply H0. rewrite big_cons inE H1.   lia.
+Qed.
+
+Lemma is_mue_no_subst : forall e sigma, is_mue e -> e [e sigma] = e.
+Proof. intros. apply subst_fset0. intros. rewrite /= is_mue_fset0 in H0. rewrite /= inE in H0.  done.
+done.
+Qed.
+
+
+Lemma is_mue1 : forall e0, is_mue e0 -> is_mue ([e(ERec e0)..] e0).
+Proof.
+intros. rewrite subst_fset0. done.
+intros.  rewrite /= is_mue_fset0 in H0.  rewrite /= inE in H0.  done. done.
+Qed.
+
+Hint Resolve is_mue1 is_mue_no_subst.
+
+Ltac case_sum := match goal with 
+(*                   | [ H : (_ && _) = true  |- _ ] => destruct (andP H);clear H*)
+                   |  |- context[Sumbool.sumbool_of_bool ?b ] => destruct  (Sumbool.sumbool_of_bool b )
+                  end;simpl in *;try done.
+
+Notation isnt_rec e := (if e is ERec _ then false else true).
+
+Lemma unf_not_rec : forall e0 e1, unfeq (ERec e0) e1 -> isnt_rec e1 -> unfeq (e0 [e (ERec e0)..]) e1.
+Proof.
+intros. destruct e1; try done.  
+move : H. simp unfeq. case_sum.
+move : H. simp unfeq. case_sum.
+move : H. simp unfeq. case_sum.
+move : H. simp unfeq. case_sum.
+Qed.
+
+(*Lemma is_mue_unfeq1 : forall e0 e1, is_mue e0 -> unfeq e0 e1 -> unfeq EEnd e1.
+roof.
+elim;try done;intros.
+destruct (isnt_rec e1) eqn :Heqn. apply unf_not_rec in H1;try done. rewrite /= is_mue_no_subst in H1.    apply H.  
+ done. done. done. apply H.  done. destruct e1; try done. 
+move : H1. simp unfeq. case_sum. 
+move/orP.  case.  apply H. done. simpl in *. done. rewrite /= is_mue_no_subst.
+
+rewrite /= unfeq_end.  done. rewrite /= unfeq_end.  done.
+simp unfeq. move : H1.  simp unfeq. case_sum. move/orP. case.  intros. 
+case_sum.  
+
+case_sum.  /orP.  
+one.  done.
+move : H1.  simp unfeq. case_sum. move/orP. case. 
+Urewrite /= is_mue_fset0 in H1. 
+simpl in *. 
+rewrite /= subst_fset0 in H1.  apply H.  done. done. intros.  rewrite /= subst_fset0 in H1. 
+destruct e1;try done. 
+
+simpl in *. apply H. done. move : H1. intros.   
+funelim (unfeq e e1);try done. 
+move : H1. simp unfeq . simpl in *. destruct e;try done. simpl in *.
+move/orP. case. rewrite /= unfeq_end. done. rewrite /= unfeq_end.  done.
+rewrite /= -Heqcall. rewrite /= subst_fset0.
+ apply H.  done. move : H1.  simp unfeq.  simpl in *.
+case : e;try done. 
+destruct e1. 
+destruct (eguarded 0 e && econtractive2 e) eqn:Heqn. 
+simp unfeq. rewrite /=. rewrite /= {2}Heqn.
+pply unfeq_unf in H1.  *)
+
+Lemma is_mue_guarded : forall e i, is_mue e -> eguarded i e.
+Proof.
+elim;intros;try done.  simpl in *. apply H. done.
+Qed. 
+
+Lemma is_mue_cont : forall e, is_mue e -> econtractive2 e.
+Proof.
+elim;intros;try done. simpl in *. rewrite /= is_mue_guarded //=. auto.
+Qed.
+
+Lemma both_is_mue : forall e0 e1, is_mue e0 -> is_mue e1 -> unfeq e0 e1.
+Proof.
+elim;try done;intros. destruct e1;try done. simp unfeq. case_sum. rewrite /= is_mue_no_subst. apply H.  done. done.
+done. rewrite /= is_mue_guarded in e0. rewrite /= is_mue_cont in e0.  done.
+
+done. done.
+simp unfeq. case_sum.  rewrite /=  is_mue_no_subst. rewrite /= H.  lia.  done. done. done.
+rewrite /= is_mue_guarded in e0. rewrite /= is_mue_cont in e0.  done. done. done.
+Qed. 
+
+Lemma is_mue_unfeq : forall e0 e1, is_mue e0 -> unfeq e0 e1 -> is_mue e1.
+Proof.
+elim;try done;intros.
+simpl in *. apply H. done. 
+move : H1.  simp unfeq.  case_sum.  rewrite /= is_mue_no_subst //=.
+move/orP.    case.  move/eqP=><-.  apply both_is_mue.  done. done. done.
+Qed.
+
+
+Lemma list_eq_trans : forall l0 l1 l2 (f : endpoint -> endpoint -> bool) ,  (forall e0 e1, In e0 l0 -> In e1 l1 -> forall e2 : endpoint, f e0 e1 -> f e1 e2 -> f e0 e2) -> list_eq f l0 l1 -> list_eq f l1 l2 -> list_eq f l0 l2.
+Proof.                            
+elim. case.  case.  done. done. move => a l l2 f.  done.
+move => a l IH.  case.  done.
+move => a0 l0. case.  done.
+move => a1 l1 f IH2.  simpl in *. split_and.  apply : IH2.  eauto.  eauto.  done. done. apply : IH. all   : eauto.  
+Qed. 
+
+Lemma list_eq_trans2 : forall l0 l1 l2 (f : endpoint -> endpoint -> bool) ,  (forall e0 e2, In e0 l0 -> In e2 l2 -> forall e1 : endpoint, f e0 e1 -> f e1 e2 -> f e0 e2) -> list_eq f l0 l1 -> list_eq f l1 l2 -> list_eq f l0 l2.
+Proof.                            
+elim. case.  case.  done. done. move => a l l2 f.  done.
+move => a l IH.  case.  done.
+move => a0 l0. case.  done.
+move => a1 l1 f IH2.  simpl in *. split_and.  apply : IH2.  eauto.  eauto.  eauto. done. apply : IH. all   : eauto.  
+Qed. 
+
+
+(*Lemma unfeq_rec_left : forall e e', econtractive2 (ERec e) -> unfeq (ERec e) e' = (if e' is ERec e'' then unfeq e e'' else false) || unfeq (e [e (ERec e)..]) e'. 
+Proof.
+intros. destruct e';simpl in *;try done;simp unfeq;case_sum.
+rewrite /= H in e0. done.
+rewrite /= H in e0. done.
+rewrite /= H in e0. done.
+rewrite /= H in e0. done.
+rewrite /= H in e0. f_eql done.
+Qed.*)
+
+
+
+(*Lemma unfeq_in_rec : forall e0 e1 e, unfeq e0 e1 ->  unfeq (ERec e0) e -> unfeq (ERec e1) e.
+Proof.
+intros. move : H0.  rewrite /= !unfeq_rec_left. 
+destruct (isnt_rec e) eqn : Heqn. intros. 
+have :  unfeq ([e(ERec e0)..] e0) e. destruct e; try done. 
+intros. 
+
+
+move => v. 
+ destru
+rewrite /=tftf
+ funelim (unfeq e0 e1);try done.
+- have : n0 = n1.   move : H. simp unfeq. lia. intros. subst. done. 
+-  apply both_is_mue. simpl in *. rewrite /= -unfeq_end.  done.
+  move : H0. rewrite /= unfeq_rec_left.    
+  destruct (isnt_rec e2) eqn : Heqn. intros.    have : unfeq EEnd e2. 
+  destruct e2 ;try done.   rewrite unfeq_end.  done. destruct e2; try done. 
+  move/orP.  case.  rewrite /= unfeq_end.  done. simpl in *. rewrite unfeq_end.  done.
+  simpl in *. done.
+- 
+  
+simp unfeq.  case_sum. 
+
+
+simp
+
+move/eqP=><-. done. apply : H. eauto. done. f_equal. rewrite /= -Heqcall.  move : H1.  simp unfeq. case_sum.  inversion H2. subst. eapply H in H0. 
+  3 : {  f_equal. 
+
+done.
+
+move => e0 e1 e H. funelim (unfeq e0 e1).
+- destruct e;simp unfeq; case_sum;try done.
+*)
+Lemma unfeq_trans : forall e0 e1 e2, econtractive2 e0 ->   unfeq e0 e1 -> unfeq e1 e2 -> unfeq e0 e2.
+Proof.
+intros.  funelim (unfeq e0 e2).
+- simp unfeq. move : H0 H1. destruct e1; simp unfeq;try done.  lia. 
+- simp unfeq. move : H0 H1. destruct e1; simp unfeq;try done.  
+- all : try solve [move : H0 H1; destruct e1; simp unfeq ; done].  
+- simp unfeq. move : H0 H1. destruct e2; simp unfeq;try done.  
+- move : H0.  simp unfeq. intros.  simp unfeq. apply : is_mue_unfeq. eauto. done.
+-  simp unfeq. move : H1 H2. destruct e1; simp unfeq;try done.  
+  split_and. rewrite /= (eqP H2) (eqP H3) //=.   
+  rewrite /= (eqP H9) (eqP H6) //=. rewrite /= (eqP H8) (eqP H5) //=.
+  apply : H. simpl in *. done.  eauto.  simpl in *. done.
+-  simp unfeq. move : H0 H1. destruct e2; simp unfeq;try done.  
+- simp unfeq. move : H1 H2. destruct e1; simp unfeq;try done.  
+  split_and. rewrite /= (eqP H1) (eqP H2) //=.   
+  rewrite /= (eqP H7) (eqP H5) //=. rewrite /= list_eqP. rewrite /= list_eqP in H6. 
+  rewrite /= list_eqP in H4. apply : list_eq_trans2.  2 : { eauto. } 2 : {  eauto. }
+  intros. apply : H. eauto. eauto. 
+  simpl in *. apply (allP H0). apply/inP. done. eauto. done. 
+  f_equal.  done.
+- simp unfeq. move : H0 H1. destruct e2; simp unfeq;try done.  
+- rewrite /= -Heqcall. move :  H1.  simp unfeq.  case_sum. 
+  move/orP. case. move/eqP=> HH.   subst. 
+  move : H2. simp unfeq. case_sum. intros. erewrite H. lia. apply econtractive2_subst.  
+  split_and.  case.  done. done.
+  eauto.  done.
+  clear Heq.   rewrite H in e0. done.
+Qed.
+
+
+(*Lemma MUE_imp : forall e, MUE e -> is_mue e.
+Proof.
+move => e. elim. done. simpl in *. intros. 
+rewrite /= is_mue_no_subst in H0.  Print MUE. done. inversion H. done.*)
+
+Lemma is_mue_subst : forall e i sigma, eguarded i e = false -> sigma i = EEnd -> is_mue e [e sigma].
+Proof.
+elim;rewrite /=;intros.
+have : n = i.  lia.  move=>->.  rewrite /= H0.  done.
+done. asimpl.  apply : H.  eauto.  simpl in *. rewrite /funcomp.  rewrite /= H1. simpl in *.
+done.
+done.
+done.
+Qed. 
 
 
 Lemma step_test3 : forall g l g' p, step g l g' ->p \notin l.1 ->
@@ -1817,24 +1871,18 @@ move => g l g' p H. elim : H p;intros.
   simp unfeq. rewrite /= !eqxx /=.  apply H1. done. apply H1. done.
 
 - simpl.  rifliad. simp unfeq. rewrite /= !eqxx /=.  
-  move : H2. clear H H1 H3 H5.  elim : gs gs' H0 H4. destruct gs'. simpl in *. intros. simp foldIn. done. 
-  done. intros. destruct gs'.  done. simpl in *. simp foldIn. simpl in *. split_and. inversion H2.    
-  inversion H0.  apply H in H8. simpl in *. 
-
-apply H.  lia. done. done. simpl in *. 
-   inversion H2.   simpl in *. done. done. inversion H2.  simpl in *. apply H5. done.
-
-- simp unfeq. rewrite /= !eqxx /=.  
-  move : H2. clear H H1 H3 H5.  elim : gs gs' H0 H4. destruct gs'. simpl in *. intros. simp foldIn. done. 
-  done. intros. destruct gs'.  done. simpl in *. simp foldIn. split_and. inversion H2.    apply H.  lia. done. done. simpl in *. 
-   inversion H2.   simpl in *. apply H5. done.
-
+  move : H2. clear H H1 H3 H5. rewrite /= list_eqP.   elim : gs gs' H0 H4. destruct gs'. simpl in *. intros. done. 
+  done. intros. destruct gs'.  done. simpl in *. split_and. inversion H2.    
+  simpl in *.   apply H5. done. 
+  apply H.  lia. done. inversion H2. done.
+- simp unfeq. rewrite /= !eqxx /=. rewrite /= list_eqP.  
+  move : H2. clear H H1 H3 H5.  elim : gs gs' H0 H4. destruct gs'. simpl in *. intros. done. 
+  done. intros. destruct gs'.  done. simpl in *. split_and. inversion H2.    
+  simpl in *. apply H5.  done.
+  apply H.  lia. done. inversion H2. done. 
 - rewrite /= ! match_n. move : H2. 
-
-
-simpl in *.
-move/forallzipP=> Hzip. simpl in *. apply Hzip. done. cc. done. apply H1 in H2.
--  simpl in *. case_if. 
+  simpl in *. move/forallzipP=> Hzip. simpl in *. apply Hzip. done. cc. done. apply H1 in H2.
+  simpl in *. case_if. 
  * rewrite project_subst in H2. move : H2.  asimpl. simpl in *.  rewrite /= H3.
    have :  ((ERec (project g0 p)) .: var >> project^~ p) = ((ERec (project g0 p)) .: ids).
    fext. case.  simpl in *. done. simpl in *. intros.  done. move =>->. intros.
@@ -1844,26 +1892,14 @@ move/forallzipP=> Hzip. simpl in *. apply Hzip. done. cc. done. apply H1 in H2.
   have : project (GRec g0) p = EEnd. simpl in *. rewrite /= H3.  done.
   intros. have : step (GRec g0) l0 g'0. constructor. done. done. intros.
 simpl in H2. rewrite project_subst in H2. move : H2. asimpl. rewrite /= H3. intros. 
+
 have:  [eEEnd .: var >> project^~ p] = [eEEnd .: ids]. fext. case;try done. intros.
 rewrite x1 in H2. 
-Check unfeq_unf.
-have : unfeq EEnd ((project g0 p)[e EEnd..]).  admit. 
+ apply : unfeq_trans.  done. 2 : { eauto. }
+ rewrite /= unfeq_end. apply : is_mue_subst. eauto.  done.
+ intro. intros.   destruct x1,x2; try (simpl in * ; done). f_equal. inversion H2. done. 
+Qed.
 
-intros.
-
-
-have : MUE ([eEEnd..] (project g0 p)). apply : MUE1. eauto.  done.
-clear x1 x0 x H1 H0 H H3. intros. elim : x H2.  done.
-intros. apply H0.
-
-
-
-
-
- 
-admit. admit. 
-
-Admitted.
 (*Operational correspondance, completeness direction*)
 Lemma harmony1 : forall g l g' S,  step g l g' -> l.1 `<=` S -> 
  EnvStep (projmap S g) l (projmap S g').
@@ -1891,4 +1927,3 @@ move : H1. move/[dup]. intro.
 move : H2. rewrite /projmap !mapf_if. rifliad. move=>[] HH [] HH0. rewrite /= -HH -HH0.  apply : step_test3. eauto. rewrite !inE . rewrite /= Heqn Heqn2. done. 
 case. move=>->.  move : H3. rewrite mapf_if H1. done. done. done.
 Qed.
-

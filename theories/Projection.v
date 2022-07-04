@@ -1,5 +1,3 @@
-
-
 From mathcomp Require Import all_ssreflect zify.
 From mathcomp Require Import finmap.
 
@@ -80,11 +78,10 @@ Require Import Program.
 
 Show Obligation Tactic.
 
-Obligation Tactic := program_simpl ; try solve [ constructor;lia | simpl in *;constructor; apply/ltP; apply in_fold;apply : in2;apply/inP |
+Obligation Tactic := program_simpl; try solve [ constructor;lia | simpl in *;constructor; apply/ltP; apply in_fold;apply : in2;apply/inP |
 constructor 2;split_and;rewrite /= emu_height_subst0; (try lia); (try done);case; simpl in *; done
 ]; try done.
 
-Check dec. 
 
 
 Fixpoint is_mue e :=
@@ -93,17 +90,32 @@ match e with
 | EEnd => true
 | _ => false 
 end.
+Check list_eq.
+
+Equations list_eq2 (es0 es1 : seq endpoint)  (f : forall e0 e1, In e0 es0 -> In e1 es1 -> bool )  : bool :=
+ list_eq2 nil nil f => true;
+ list_eq2 (e::es') (e1::es1') f => (@f e e1 _ _) && list_eq2 es' es1' (fun e0 e1 H0 H1 => f e0 e1 _ _);
+ list_eq2 _ _ _ => false. 
 
 
+Lemma list_eqP : forall l0 l1 f, list_eq2 l0 l1 (fun e0 e1 (_ : In e0 l0) (_: In e1 l1) => f e0 e1) = list_eq f l0 l1.  
+Proof.
+elim. case.  done. done.
+move => a l IH.  case.  done. simpl in *. intros. simp list_eq2.  f_equal. done.
+Qed. 
+
+
+Definition is_rec e := if e is ERec _ then true else false.
+
+(*The change that made transitivity possible was in ERec, either syntactic eq or unfold, we dont need recuprev call unfeq e0 e1 on unfeq ERec e0 ERec e1 because that allows unfoldings under ERec which we dont need*)
 Equations unfeq (e0 e1 : endpoint) : bool by wf (esize e1,emu_height e0) 
               ((Equations.Prop.Subterm.lexprod _ _ lt lt)) := {
 unfeq (EVar n0) (EVar n1) =>  n0 == n1; 
 unfeq EEnd e => is_mue e;
 unfeq (EMsg d0 c0 v0 e0') (EMsg d1 c1 v1 e1') => (d0 == d1) && (c0 == c1) && (v0 == v1) && ((unfeq e0' e1' )) ;
-unfeq (EBranch d0 c0 es0) (EBranch d1 c1 es1) => (d0 == d1) && (c0 == c1) && ((foldIn (zip es0 es1) (fun x b H => b && ((unfeq x.1 x.2) ) ) true));
+unfeq (EBranch d0 c0 es0) (EBranch d1 c1 es1) => (d0 == d1) && (c0 == c1) && (list_eq2  es0 es1 (fun e0 e1 H0 H1 => unfeq e0 e1)); (* ((foldIn (zip es0 es1) (fun x b H => b && ((unfeq x.1 x.2) ) ) true));*)
 unfeq (ERec e0') e1 with (dec (econtractive2 (ERec e0'))) => {
-  unfeq (ERec e0') (ERec e1') (left _) => unfeq e0' e1' ||  ((unfeq (e0' [e (ERec e0').:ids]) (ERec e1')));
-  unfeq (ERec e0') e1 (left _) =>  ((unfeq (e0' [e (ERec e0').:ids]) e1)); 
+  unfeq (ERec e0') e1 (left _)  => ((ERec e0') == e1) || ((unfeq (e0' [e (ERec e0').:ids]) e1));(*Shifting is wrong but lets keep it as it is for now and later see where it blows up*)
   unfeq _ _ (right _) => false
  };
 
@@ -115,13 +127,8 @@ unfeq (ERec e0') e1 with (dec (econtractive2 (ERec e0'))) => {
 
 unfeq _ _ => false}.  
 Next Obligation.
-simpl in *;constructor; apply/ltP; apply in_fold;apply : in2;apply/inP. apply H. Qed.
+simpl in *;constructor; apply/ltP.  apply in_fold. apply/inP. done. Qed. 
 Next Obligation. Qed.
-Next Obligation. Qed.
-Next Obligation. Qed.
-Next Obligation. Qed.
-Next Obligation. Qed.
-
 
 
 
@@ -130,6 +137,45 @@ Next Obligation. Qed.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+
+Check in_left. Print Sumbool.sumbool_of_bool.
+(*Lemma unfeq_elim2
+     : forall P : endpoint -> endpoint -> bool -> Type,
+       (forall n0 n1 : fin, P (EVar n0) (EVar n1) (n0 == n1)) ->
+       (forall n : fin, P (EVar n) EEnd false) ->
+       (forall (n : fin) (d : dir) (c : ch) (v : value) (e : endpoint), P (EVar n) (EMsg d c v e) false) ->
+       (forall (n : fin) (d0 : dir) (c0 : ch) (l : seq endpoint), P (EVar n) (EBranch d0 c0 l) false) ->
+       (forall (n : fin) (e0 : endpoint), P (EVar n) (ERec e0) false) ->
+       (forall e : endpoint, P EEnd e (is_mue e)) ->
+       (forall (d : dir) (c : ch) (v : value) (e : endpoint) (n : fin), P (EMsg d c v e) (EVar n) false) ->
+       (forall (d : dir) (c : ch) (v : value) (e : endpoint), P (EMsg d c v e) EEnd false) ->
+       (forall (d0 : dir) (c0 : ch) (v0 : value) (e0' : endpoint) (d1 : dir) (c1 : ch) (v1 : value) (e1' : endpoint),
+        P e0' e1' (unfeq e0' e1') -> P (EMsg d0 c0 v0 e0') (EMsg d1 c1 v1 e1') ((d0 == d1) && (c0 == c1) && (v0 == v1) && unfeq e0' e1')) ->
+       (forall (d : dir) (c : ch) (v : value) (e : endpoint) (d1 : dir) (c1 : ch) (l : seq endpoint), P (EMsg d c v e) (EBranch d1 c1 l) false) ->
+       (forall (d : dir) (c : ch) (v : value) (e e1 : endpoint), P (EMsg d c v e) (ERec e1) false) ->
+       (forall (d0 : dir) (c0 : ch) (l : seq endpoint) (n : fin), P (EBranch d0 c0 l) (EVar n) false) ->
+       (forall (d0 : dir) (c0 : ch) (l : seq endpoint), P (EBranch d0 c0 l) EEnd false) ->
+       (forall (d0 : dir) (c0 : ch) (l : seq endpoint) (d : dir) (c : ch) (v : value) (e : endpoint), P (EBranch d0 c0 l) (EMsg d c v e) false) ->
+       (forall (d0 : dir) (c0 : ch) (es0 : seq endpoint) (d1 : dir) (c1 : ch) (es1 : seq endpoint),
+        (forall e0 e1 : endpoint, In e0 es0 -> In e1 es1 -> P e0 e1 (unfeq e0 e1)) ->
+        P (EBranch d0 c0 es0) (EBranch d1 c1 es1) ((d0 == d1) && (c0 == c1) && list_eq unfeq es0 es1)) ->
+       (forall (d0 : dir) (c0 : ch) (l : seq endpoint) (e0 : endpoint), P (EBranch d0 c0 l) (ERec e0) false) ->
+       (forall (e0' : endpoint) (e : econtractive2 (ERec e0') = true) (n : fin),
+        P e0' [e(ERec e0')..] (EVar n) (unfeq e0' [e(ERec e0')..] (EVar n)) ->   econtractive2 (ERec e0')  -> P (ERec e0') (EVar n) (unfeq e0' [e(ERec e0')..] (EVar n))) ->
+       (forall (e0' : endpoint) (e : econtractive2 (ERec e0') = true),
+        P e0' [e(ERec e0')..] EEnd (unfeq e0' [e(ERec e0')..] EEnd) ->  econtractive2 (ERec e0') ->  P (ERec e0') EEnd (unfeq e0' [e(ERec e0')..] EEnd)) ->
+       (forall (e0' : endpoint) (e : econtractive2 (ERec e0') = true) (d : dir) (c : ch) (v : value) (e0 : endpoint),
+        P e0' [e(ERec e0')..] (EMsg d c v e0) (unfeq e0' [e(ERec e0')..] (EMsg d c v e0)) ->  econtractive2 (ERec e0') -> P (ERec e0') (EMsg d c v e0) (unfeq e0' [e(ERec e0')..] (EMsg d c v e0))) ->
+       (forall (e0' : endpoint) (e : econtractive2 (ERec e0') = true) (d0 : dir) (c0 : ch) (l : seq endpoint),
+        P e0' [e(ERec e0')..] (EBranch d0 c0 l) (unfeq e0' [e(ERec e0')..] (EBranch d0 c0 l)) ->  econtractive2 (ERec e0') -> P (ERec e0') (EBranch d0 c0 l) (unfeq e0' [e(ERec e0')..] (EBranch d0 c0 l))) ->
+       (forall (e0' : endpoint) (e : econtractive2 (ERec e0') = true) (e1' : endpoint),
+        P e0' e1' (unfeq e0' e1') ->
+        P e0' [e(ERec e0')..] (ERec e1') (unfeq e0' [e(ERec e0')..] (ERec e1')) ->  econtractive2 (ERec e0') ->  P (ERec e0') (ERec e1') (unfeq e0' e1' || unfeq e0' [e(ERec e0')..] (ERec e1'))) ->
+       (forall (e0' : endpoint) (e0 : econtractive2 (ERec e0') = false) (e1 : endpoint), P (ERec e0') e1 false) -> forall e0 e1 : endpoint, P e0 e1 (unfeq e0 e1).
+Proof.
+intros. apply unfeq_elim;eauto.
+intros. split_and. rewrite /= list_eqP. eauto. 
+Qed.*)
 
 Let inE := NewSyntax.inE.
 
@@ -727,6 +773,7 @@ Lemma fv_project_eq : forall g p n, lpreds rec_pred g ->  (n \in fv_g g) = (n \i
 Proof. intros. destruct ( (n \in fv_g g)) eqn:Heqn. rewrite fv_project_in //=.
 destruct ((n \in fv (project g p))) eqn:Heqn2. erewrite fv_rproject_in in Heqn. done. eauto. done. 
 Qed.*)
+
 
 
 
