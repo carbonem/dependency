@@ -288,7 +288,7 @@ simpl. rewrite big_map. rewrite big_exists. apply/hasP. exists g. done. done.
 Qed.
 
 
-Lemma inj_rem : forall e0 e1 f f', injective f  -> e0 ⟨e f⟩ = e1 ⟨e f⟩ -> e0 ⟨e f' ⟩ = e1 ⟨e f' ⟩.
+Lemma injsimpl_rem : forall e0 e1 f f', injective f  -> e0 ⟨e f⟩ = e1 ⟨e f⟩ -> e0 ⟨e f' ⟩ = e1 ⟨e f' ⟩.
 Proof. 
 elim. intros. destruct e1;try done.  f_equal. move : H0. asimpl. case. move/H. by move=>->. 
 - case;try done.

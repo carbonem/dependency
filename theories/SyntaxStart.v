@@ -1,17 +1,13 @@
-(*Require Export Dep.fintype. *)
-
 From mathcomp Require Import all_ssreflect zify.
-From Equations Require Import Equations.
-From deriving Require Import deriving. Locate In.
+From deriving Require Import deriving. 
 
-From Dep Require Export Utils Syntax. 
+From Dep Require Export Utils.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(*Inductive ptcp  : Set :=
-  | Ptcp : nat   -> ptcp .*)
-
+Inductive ptcp  : Set :=
+  | Ptcp : nat   -> ptcp .
 Definition nat_of_ptcp (p : ptcp) := let: Ptcp n := p in n.
 Canonical ptctp_newType := Eval hnf in [newType for nat_of_ptcp]. 
 Definition ptcp_eqMixin := [eqMixin of ptcp by <:]. 
@@ -22,8 +18,8 @@ Definition ptcp_countMixin := [countMixin of ptcp by <:].
 Canonical ptcp_countType := CountType ptcp ptcp_countMixin.
 
 
-(*Inductive ch  : Set :=
-  | Ch : nat   -> ch .*)
+Inductive ch  : Set :=
+  | Ch : nat   -> ch .
 
 Definition nat_of_ch (c : ch) := let: Ch n := c in n.
 Canonical ch_newType := Eval hnf in [newType for nat_of_ch].
@@ -35,7 +31,7 @@ Definition ch_countMixin := [countMixin of ch by <:].
 Canonical ch_countType := CountType ch ch_countMixin.
 
 
-(*Inductive action  : Set := Action of ptcp & ptcp & ch.*)
+Inductive action  : Set := Action of ptcp & ptcp & ch.
 
 Definition prod_of_action (a : action) := let '(Action p0 p1 c) := a in (p0,p1,c). 
 Definition action_indDef := [indDef for action_rect].
@@ -92,8 +88,9 @@ Inductive gType  : Set :=
   | EEnd : endpoint  
   | EMsg : dir -> ch -> value -> endpoint -> endpoint  
   | EBranch  : dir -> ch  -> seq endpoint -> endpoint  
-  | ERec : endpoint -> endpoint .
+  | ERec : endpoint -> endpoint . 
 Set Elimination Schemes.
+
 
 
 (*It is hard to give a mutually inductive nested induction principle*)
@@ -222,26 +219,11 @@ End Elimination.
 Combined Scheme mut_ind_aux from gType_rect, mysort_rect, value_rect, endpoint_rect.
 
 
-Section SpecializeElimination. 
-Variables (Pg : gType -> Prop) 
-          (Pv : value -> Prop) 
-          (Pe : endpoint -> Prop) 
-          (Ps : mysort -> Prop).
+Inductive ForallT (A : Type) (P : A -> Type) : seq A -> Type :=
+    Forall_nilT : ForallT P [::] | Forall_consT : forall (x : A) (l : seq A), P x -> ForallT P l -> ForallT P (x :: l).
 
-Definition mut_ind := (@mut_ind_aux Pg Pv Pe Ps (Forall Pg) (Forall Pe) (Forall Ps)).  
-(*(fun gl => forall g, In g gl ->Pg g)
-                                                (fun el => forall e, In e el ->Pe e)
-                                                (fun sl  => forall s, In s sl ->Ps s)). *)
+Print List.In.
 
-Definition true_pred A := fun (_ : A) => nat.
-Definition gType_rect_true := (@gType_rect Pg  (@true_pred value) (@true_pred endpoint) (@true_pred mysort) (fun gl => forall g, In g gl ->Pg g)
-                                                (@true_pred (seq endpoint))
-                                                (@true_pred (seq mysort))).
-Check endpoint_rect.
-Definition endpoint_rect_true := (@endpoint_rect (@true_pred gType) (@true_pred value) Pe (@true_pred mysort) (@true_pred (seq gType))
-                                                (fun el => forall e, In e el -> Pe e)
-                                                (@true_pred (seq mysort))).
-End SpecializeElimination.
 
 
 
@@ -298,6 +280,32 @@ match st0,st1 with
  | SGType g0, SGType g1 => gType_eqb g0 g1
  | _ , _ => false
 end.
+
+
+
+
+Section SpecializeElimination. 
+Variables (Pg : gType -> Prop) 
+          (Pv : value -> Prop) 
+          (Pe : endpoint -> Prop) 
+          (Ps : mysort -> Prop).
+
+
+Definition mut_ind := (@mut_ind_aux Pg Pv Pe Ps (ForallT Pg) (ForallT Pe) (ForallT Ps)).  
+(*(fun gl => forall g, In g gl ->Pg g)
+                                                (fun el => forall e, In e el ->Pe e)
+                                                (fun sl  => forall s, In s sl ->Ps s)). *)
+
+Definition true_pred A := fun (_ : A) => nat.
+Definition gType_rect_true := (@gType_rect Pg  (@true_pred value) (@true_pred endpoint) (@true_pred mysort) (fun gl => forall g, In g gl ->Pg g)
+                                                (@true_pred (seq endpoint))
+                                                (@true_pred (seq mysort))).
+
+Definition endpoint_rect_true := (@endpoint_rect (@true_pred gType) (@true_pred value) Pe (@true_pred mysort) (@true_pred (seq gType))
+                                                (fun el => forall e, In e el -> Pe e)
+                                                (@true_pred (seq mysort))).
+End SpecializeElimination.
+
 
 
 Ltac case_filter :=  case;try (rewrite /= ; constructor ; done);intros.
@@ -462,16 +470,16 @@ Proof. move : axioms_eqbs. do ? (case;intro). move : a1.  move/iff_reflect.  don
 Qed.
 
 Definition endpoint_EqMixin := EqMixin endpoint_axiom.
-Canonical endpoint_EqType := EqType endpoint endpoint_EqMixin.
+Global Canonical endpoint_EqType := EqType endpoint endpoint_EqMixin.
 
 Definition gType_EqMixin := EqMixin gType_axiom.
-Canonical gType_EqType := EqType gType gType_EqMixin.
+Global Canonical gType_EqType := EqType gType gType_EqMixin.
 
 Definition mysort_EqMixin := EqMixin mysort_axiom.
-Canonical mysort_EqType := EqType mysort mysort_EqMixin.
+Global Canonical mysort_EqType := EqType mysort mysort_EqMixin.
 
 Definition value_EqMixin := EqMixin value_axiom.
-Canonical value_EqType := EqType value value_EqMixin.
+Global Canonical value_EqType := EqType value value_EqMixin.
 
 
 
@@ -485,6 +493,9 @@ move=>->. by rewrite in_cons eqxx. rewrite in_cons. move/H=>->.
 by rewrite orbC. 
 rewrite inE. move/orP =>[].  move/eqP=>->. auto. move/H. auto.
 Qed.
+
+
+
 
 
 Lemma gType_ind
@@ -609,3 +620,8 @@ match unf_recs 0 g with
 end.*)
 
 End Operations.
+
+
+Derive Inversion gType_inv with gType Sort Prop.
+
+Check gType_inv.

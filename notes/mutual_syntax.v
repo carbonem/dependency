@@ -1,0 +1,1 @@
+I tried to parameterize global types over its value set, only assuming it be an eqType. This prevents me from later instantiating global types with inductive value types during its definition (as its not yet an eqType). Solution is to define it mutually inductively.

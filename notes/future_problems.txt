@@ -1,0 +1,5 @@
+Type inference of processes
+Semantic typing with Iris (Jonas work)
+Rust applications
+Find critiques of global types (POPL2022, piruette critized them for being hard to understand), and adress them
+

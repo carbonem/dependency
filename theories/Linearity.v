@@ -7,7 +7,7 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 From deriving Require Import deriving.
 From Dep Require Export Utils.
-From Dep Require Import NewSyntax Bisimulation Structures.
+From Dep Require Import NewSyntax Substitutions Structures.
 
 Let inE := NewSyntax.inE.
 
@@ -80,6 +80,15 @@ Ltac contra_list := match goal with
 
 Definition exists_depP  (Pm : seq bool -> Prop) (P : seq action -> Prop) a0 aa a1 := exists m, size m = size aa /\ P (a0::((mask m aa))++[::a1]) /\ Pm m.
 Notation exists_dep := (exists_depP (fun _ => True)).
+
+Inductive Tr : seq action -> gType  -> Prop :=
+| TR_nil G : Tr nil G 
+| TRMsg a u aa g0 : Tr aa g0 -> Tr (a::aa) (GMsg a u g0)
+| TRBranch d a n gs aa  : n < size gs -> Tr aa (nth d gs n) ->  Tr (a::aa) (GBranch a gs)
+| TRUnf aa g : Tr aa (g[g GRec g.:var])  -> Tr aa (GRec g).
+Hint Constructors Tr.
+
+
 
 Definition Linear (sg : gType) := 
 forall aa_p a0 aa a1, 
@@ -215,11 +224,11 @@ Notation epred := (lpreds (econtractive2::(ebound_i 0)::esize_pred::nil)).
 
 Unset Elimination Schemes. 
 Inductive step : gType -> label  -> gType -> Prop :=
- | GR1 (a : action) u g : gpred (GMsg a u g) -> step (GMsg a u g) (a, inl u) g
- | GR2 a n gs : gpred (GBranch a gs) -> n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
- | GR3 a u l g1 g2 : gpred (GMsg a u g1) -> step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
- | GR4 a l gs gs' : gpred (GBranch a gs) -> size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
- | GR_rec g l g' : gpred (GRec g) -> step g[g (GRec g).: var] l g'  -> 
+ | GR1 (a : action) u g :  step (GMsg a u g) (a, inl u) g
+ | GR2 a n gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
+ | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
+ | GR4 a l gs gs' : size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
+ | GR_rec g l g' : step g[g (GRec g).: var] l g'  -> 
                    step (GRec g) l g'.
 (* | GR_rec g l g' g'' :  gpred g -> gpred g'' -> 
                         bisimilar g g'' -> 
@@ -235,17 +244,17 @@ Hint Constructors step.
 
 Lemma step_ind
      :  forall P : gType -> label -> gType -> Prop,
-       (forall (a : action) (u : value) (g : gType), gpred (GMsg a u g) -> P (GMsg a u g) (a, inl u) g) ->
-       (forall (a : action) (n : nat) (gs : seq gType), (gpred (GBranch a gs)) ->
+       (forall (a : action) (u : value) (g : gType), P (GMsg a u g) (a, inl u) g) ->
+       (forall (a : action) (n : nat) (gs : seq gType),
         n < size gs -> P (GBranch a gs) (a, inr n) (nth GEnd gs n)) ->
-       (forall (a : action) (u : value) (l : label) (g1 g2 : gType), gpred (GMsg a u g1) ->
+       (forall (a : action) (u : value) (l : label) (g1 g2 : gType),
         step g1 l g2 ->
         P g1 l g2 -> ptcp_to a \notin l.1 -> P (GMsg a u g1) l (GMsg a u g2)) ->
-       (forall (a : action) (l : label) (gs gs' : seq gType), gpred (GBranch a gs) ->  size gs = size gs' ->
+       (forall (a : action) (l : label) (gs gs' : seq gType), size gs = size gs' ->
         Forall (fun p => step p.1 l p.2) (zip gs gs') ->  Forall (fun p => P p.1 l p.2) (zip gs gs') -> 
 
         ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
-       (forall g l g', gpred (GRec g) ->  step g[g (GRec g).: var] l g'  -> P g[g (GRec g).: var] l g' -> P (GRec g) l g') ->
+       (forall g l g', step g[g (GRec g).: var] l g'  -> P g[g (GRec g).: var] l g' -> P (GRec g) l g') ->
        forall (s : gType) (l : label) (s0 : gType), step s l s0 -> P s l s0.
 Proof.
 move => P H0 H1 H2 H3 H4. fix IH 4.
@@ -257,106 +266,6 @@ intros. apply H3;auto. elim : f;auto.
 intros. apply : H4;auto.
 Qed.
 
-Require Import Paco.paco.
-
-
-Definition ext_act (p : option (action * option value + fin)) : option action :=
-if p is Some (inl (a,_)) then Some a else None.
-
-Fixpoint new_tr s g := 
-match s with 
-| nil => true 
-| a::s' => (ext_act (act_of g) == Some a) && (has (fun g => new_tr s' g) (next g))
-end.
-
-
-Lemma TrP1 : forall s g, Tr s g -> contractive2 g ->  new_tr s g.
-Proof.
-move => s g.
-elim;auto;intros;simpl.
-- rewrite eqxx /=. asimpl. rewrite H0 //=. 
-- rewrite eqxx /=. rewrite /next /=.  apply/has_nthP. exists n. done.  apply : H1.  
-  simpl in H2. apply (allP H2). apply/mem_nth. done.
-- have :  contractive2 g0 [gGRec g0 .: var]. 
-  apply/contractive2_subst. simpl in H1. split_and. case. done. intros. done. move/H0. 
-  simpl. simpl in H1.
-  destruct aa. done. simpl. split_and.  rewrite act_of_unf //=. rewrite next_unf //=. 
-Qed.
-
-Lemma TrP2 : forall s g, contractive2 g -> new_tr s g -> Tr s g.
-Proof.
-elim;auto;intros;simpl.
-remember (mu_height g). 
-move : n g Heqn H0 H1. 
-elim. intros. destruct g;try done; simpl in H1; split_and; move : H2;rewrite /act_of /=; move/eqP; case; intros;
-subst. constructor. apply H. destruct (orP H3);try done. destruct (orP H3);try done.
-rewrite /next /= in H3. 
-destruct (hasP H3). move : H1. move/nthP=>HH. specialize HH with GEnd. 
-destruct HH. econstructor. eauto. apply H. simpl in H0. apply (allP H0). apply/mem_nth. done. 
-rewrite -H4 in H2. apply : H2. 
-
-intros. destruct g;try done. 
-constructor. apply H0. rewrite mu_height_subst0. simpl in Heqn. inversion Heqn. done.
-intros. simpl in H1. split_and. intros. destruct n0. done. done. simpl in H1. split_and. 
-apply/contractive2_subst. simpl in H1. split_and.
-case;try done.
-move : H2. simpl in H1.  split_and. move : H2. rewrite /= act_of_unf //=. rewrite next_unf //=. 
-Qed.
-
-Lemma TrP : forall s g, contractive2 g -> Tr s g <-> new_tr s g.
-Proof.
-intros. split;auto using TrP1,TrP2.
-Qed.
-
-
-Lemma bisim_tr : forall s g0 g1, bisimilar g0 g1 -> new_tr s g0 = new_tr s g1.
-Proof. 
-elim;intros. done.
-simpl. punfold H0. inversion H0. subst. rewrite H1. f_equal. 
-clear H1 H0.
-remember (next g0). remember (next g1). clear g0 Heql0 g1 Heql1.  
-elim  : l0 l1 H2 H3.
--  case;intros.
- * done. 
- * done. 
-- move => a0 l0 IH. case;intros. 
- * done. 
- * simpl. simpl in H3. inversion H3. subst. simpl in H4. erewrite H. 2 : { inversion H4. eauto. done. } 
-   f_equal.  apply :IH. all : eauto. 
-Qed.
-
-
-Lemma bisim_Tr : forall s g0 g1, contractive2 g0 -> contractive2 g1 ->  bisimilar g0 g1 -> Tr s g0 -> Tr s g1.
-Proof. 
-intros. apply/TrP;try done. rewrite -(@bisim_tr _ _ _  H1).  apply/TrP. done. done. 
-Qed.
-
-
-
-Lemma bisim_sym: forall g0 g1,  bisimilar g0 g1 -> bisimilar g1 g0.
-Proof. 
-pcofix CIH. intros. punfold H0. inversion H0. pfold. subst.  constructor. rewrite H //=. rewrite H1 //=.
-move : H2. move/forallzipP=>Hzip. apply/forallzipP. done.
-intros. simpl in *. right. apply : CIH.
-suff :  upaco2 bisimilar_f bot2 (nth GEnd (next g0) x0) (nth GEnd (next g1) x0).
-case. intros. punfold a. pfold. eauto.
-case. apply : Hzip. done. rewrite H1. done.
-Qed.
-
-
-(*Lemma step_contractive : forall g l g', step g l g' -> contractive2 g.
-Proof. move => g l g'. elim;try done;intros. simpl. cc.  simpl. cc.
-move : H1. move/forallzipP=>Hzip. simpl in Hzip. apply/allP. intro. move/nthP=>HH. 
-specialize HH with GEnd. destruct HH. rewrite -H3. apply Hzip. repeat constructor. done. done. 
-cc.
-Qed.
-
-Lemma step_contractive2 : forall g l g', step g l g' -> contractive2 g'.
-Proof. move => g l g'. elim;try done.
-intros. cc. intros. have : all contractive2 gs. cc. intros. apply (allP x).  cc. 
-intros. simpl. move : H1. move/forallzipP=>Hzip. simpl in Hzip. apply/allP. intro. move/nthP=>HH. 
-specialize HH with GEnd. destruct HH. rewrite -H3. apply Hzip. repeat constructor. done. rewrite H. done. 
-Qed.*)
 
 Lemma step_tr_in : forall g vn g', step g vn g' -> forall s, Tr s g' -> 
 Tr s g \/ exists n, Tr (insert s n vn.1) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) (take n s).
@@ -365,10 +274,10 @@ move => g vn g'. rewrite /insert. elim.
 - intros. right. exists 0. simpl. rewrite take0 drop0 /=.  auto. 
 - intros. right. exists 0. simpl. rewrite take0 drop0 /=. eauto.  
 - intros. destruct s;auto. 
-  inversion H3. subst. move : (H1 _ H5)=>[];auto.
+  inversion H2. subst. move : (H0 _ H4)=>[];auto.
   move=> [] n [].  intros. right. exists n.+1. simpl. auto. 
 - intros. destruct s; auto.
-  inversion H4. subst. move : H2. move/forallzipP=>Hzip. simpl in Hzip. rewrite -H0 in H8. 
+  inversion H3. subst. move : H1. move/forallzipP=>Hzip. simpl in Hzip. rewrite -H in H7. 
   specialize Hzip with d d n s.
 have :  Tr s (nth d gs n) \/
          (exists n0 : fin,
@@ -376,11 +285,9 @@ have :  Tr s (nth d gs n) \/
             Forall (fun a : action => ptcp_to a \notin l.1) (take n0 s)).
 apply : Hzip;try done.
 case;intros. left. econstructor. eauto. eauto. destruct b. right. 
-exists x.+1. split;simpl;try done. econstructor. eauto. destruct H2. eauto. destruct H2. eauto.
-- intros. destruct (@H1 _ H2). left. destruct s.   done. constructor. done.
-
-
- destruct H3. right. exists x. destruct H3. split;auto.
+exists x.+1. split;simpl;try done. econstructor. eauto. destruct H1. eauto. destruct H1. eauto.
+- intros. destruct (@H0 _ H1). left. destruct s.   done. constructor. done.
+  destruct H2. right. exists x. destruct H2. split;auto.
 Qed.
 
 
@@ -655,6 +562,4 @@ rewrite /IO_OO in b. case : (orP b).
        destruct l1.  simpl in Heq0.  inversion Heq0.  eapply mem_mask with (m:= x3). rewrite HHeq'. by rewrite mem_cat inE eqxx orbC. simpl in Heq0. 
 inversion Heq0. rewrite mem_cat.  apply/orP. right. rewrite inE. apply/orP. right. eapply mem_mask with (m:=x3). rewrite HHeq'. by  rewrite mem_cat inE eqxx orbC. 
 Qed.
-
-
 
