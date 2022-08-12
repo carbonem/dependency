@@ -90,7 +90,8 @@ Qed.
 Ltac split_and := intros;repeat (match goal with 
                    | [ H : is_true (_ && _) |- _ ] => destruct (andP H);clear H
                    | [ H : (_ && _) = true  |- _ ] => destruct (andP H);clear H
-
+                   | [ H : _ /\ _  |- _ ] => destruct H
+                   | [ |- _ /\ _ ] => split
                    | [ |- is_true (_ && _) ] => apply/andP;split 
 
                   end);auto.

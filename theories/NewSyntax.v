@@ -2,7 +2,7 @@ Require Export Dep.unscoped.
 From mathcomp Require Import all_ssreflect zify.
 
 Check Logic.eq_refl.
-From Dep Require Export SyntaxStart.
+From Dep Require Export SyntaxStart Utils.
 
 
 
@@ -703,51 +703,6 @@ match g with
 end.
 
 
-(*Lemma bound_lt : forall (g : gType) i j, i < j -> bound_i i g -> bound_i j g.
-Proof. 
-elim.
-- rewrite /=;auto. move=>n i j.  move=> /leP H /ltP H1. apply/ltP.  lia. 
-- rewrite /=;auto. intros. apply : (@H i.+1 j.+1); done. 
-- rewrite /=;auto. 
-- intros. move : (allP H1) => H2. apply/allP.  move=> Hin H4. apply H2 in H4 as H5. apply : (H _ _ _ _ H0).
-  done.
-- intros. apply (allP H1). done. 
-Qed.
-
-Lemma bound_le : forall (g : gType) i j, i <= j -> bound_i i g -> bound_i j g.
-Proof. 
-intros. destruct (j == i) eqn:Heqn. rewrite (eqP Heqn). done. apply/bound_lt. 2 : {  eauto. } lia.
-Qed.
-
-Lemma bound_fv1 : forall g i, bound_i i g -> (forall v, v \in gType_fv g -> v < i).
-Proof. 
-elim;rewrite /=;intros.
-rewrite !inE in H0. rewrite (eqP H0). done.
-rewrite !inE in H0. done.
-move : H1. move/imfsetP=>[]. simpl. move => x. rewrite !inE. split_and. subst. 
-suff : x < i.+1. lia. apply H. done. done.
-apply H. done. done.  move : H1. rewrite big_map big_exists. move/hasP=>[]. intros.  apply : H. eauto. 
-apply (allP H0).  done. done.
-Qed.
-
-Lemma bound_fv2 : forall g i, (forall v, v \in gType_fv g -> v < i) ->  bound_i i g.
-Proof.
-elim;rewrite /=;intros. apply H. rewrite !inE //=. done.
-apply H.  intros. 
-destruct (eqVneq v 0).  subst.  done.
-suff : v.-1 < i. lia. apply H0. 
-apply/imfsetP. exists v. simpl. rewrite !inE /=. split_and. all: try done. 
-apply H. auto. apply/allP. intro. intros. apply H.  done.  intros.  apply H0. rewrite big_map big_exists.
-apply/hasP. exists x. done.  done. 
-Qed.
-
-Lemma bound_fv : forall g i, bound_i i g <-> (forall v, v \in gType_fv g -> v < i).
-Proof. 
-intros. split;intros.  apply : bound_fv1; eauto. 
-apply : bound_fv2; eauto. 
-Qed. *)
-
-
 Fixpoint substitution (i : nat) g g'  := 
 match g with 
 | GEnd => GEnd
@@ -758,7 +713,7 @@ match g with
 end.
 
 
-
+Open Scope nat_scope.
 Fixpoint gsize e := 
 match e with 
 | GMsg  _ _ e0 => (gsize e0).+1
@@ -777,47 +732,3 @@ match e with
 | ERec  e0 => (esize e0).+1
 | _ => 1
 end.
-
-
-(*Open Scope nat_scope.
-Fixpoint fvg (g : gType) : {fset (nat * bool)} := 
-match g with 
-| GMsg a u g0 => [fset (n,true) | n in gType_fv g  (* (fvg g0) *)]
-| GBranch  a gs  => [fset (n,true) | n in gType_fv g (*(\bigcup_(i <- (map fvg gs )) i)*) ] 
-| GRec g0  => [fset ((n.1).-1,n.2) | n in (fvg g0) & n.1 != 0]
-| GVar n => [fset (n,false)]
-| GEnd => fset0
-end.*)
-
-(*Lemma guarded_fvg1 : forall g i, guarded i g -> (i,false) \notin fvg g.  
-Proof.
-elim;rewrite /=;try done;intros;rewrite ?inE //=.
-lia. apply/imfsetP=>[]/= [] x /=. rewrite !inE. split_and. inversion q. 
-subst. apply/negP. apply : H. eauto. have : x.1.-1.+1 = x.1 by lia. move=>->.
-destruct x.  simpl in *. subst. done. 
-apply/imfsetP=>[] [] /= x HH []. done. 
-apply/imfsetP=>[] [] /= x HH []. done. 
-Qed.
-
-Lemma guarded_fvg2 : forall g i, ((i,false)  \notin fvg g) -> guarded i g.
-Proof.
-elim;rewrite /=;try done;intros.
-move : H. rewrite !inE. simpl. lia.
-apply H. move : H0.  move/imfsetP=>HH. apply/negP=>HH'. apply/HH. rewrite /=. 
-exists (i.+1,false). rewrite !inE. split_and. 
-rewrite /=. done. 
-Qed.
-
-Lemma guarded_fvg : forall g i, guarded i g <-> ((i,false) \notin fvg g).  
-Proof.
-intros. split;intros; auto using guarded_fvg1, guarded_fvg2. 
-Qed.*)
-
-(*Lemma fvg_subst : forall g sigma i b, injective sigma -> (sigma i = var i) -> (forall n b, (n,b) \notin (fvg (sigma n))) -> (i, b) \in fvg g [g sigma] ->  (i, b) \in fvg g.
-Proof.
-elim;rewrite /=;intros;try done. 
-rewrite !inE.  apply/eqP. 
-have : i = (fun k => if (sigma k) is GVar n' then n' else k) i.  rewrite H1.apply/eqP. f_equal. apply H in H1. subst. 
-destruct (eqVneq k n). done. subst. rewrite H1 /= !inE in H0. move : H0. move/eqP. case. intros. subst. done. 
-simpl in rewrite H0  /= !inE in H. done. 
-simpl in H. rewr*)

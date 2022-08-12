@@ -1,26 +1,25 @@
 From mathcomp Require Import all_ssreflect zify.
 From Equations Require Import Equations.
 From mathcomp Require Import finmap.
-From Paco Require Import paco.
+From Dep Require Export Linearity.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-From Dep Require Export NewSyntax  Bisimulation Projection Inductive_Linearity Structures.
-
 Let inE :=  NewSyntax.inE.
 
-
-Unset Elimination Schemes. Check epred.
+Declare Scope unf_scope.
+Locate "+".
+Definition unfe e := (e[e ERec e.:  succn >> EVar]). 
+Unset Elimination Schemes. 
 Inductive Estep : endpoint ->  (dir * ch * (value + nat))  -> endpoint -> Prop :=
 | estep_msg d c v e0  : Estep (EMsg d c v e0) (d,c, inl v) e0
 | estep_msg_async d vn c c' v e0 e0'  : Estep e0 (d,c,vn) e0' -> c <> c' -> 
                                         Estep (EMsg Sd c' v e0) (d,c,vn) (EMsg Sd c' v e0')
 | estep_branch n es d c   :   n < size es -> Estep (EBranch d c es) (d,c, inr n) (nth EEnd es n)
 | estep_branch_async es0 es1 vn d c c'  : size es0 = size es1 -> Forall (fun p =>  Estep p.1 (d,c,vn) p.2) (zip es0 es1) -> c <> c' -> Estep (EBranch Sd c' es0) (d,c,vn) (EBranch Sd c' es1)
-| estep_rec e l e' : epred (ERec e) -> Estep e[e (ERec e).:ids] l e' -> Estep (ERec e) l e'.
-(*| estep_rec e l e1 e' : epred e -> epred e1 ->  ebisimilar e e1 -> Estep e1 l e' -> Estep e l e'.*)
+| estep_rec e l e' : Estep (unfe e) l e' -> Estep (ERec e) l e'.
 Set Elimination Schemes.
 Hint Constructors Estep.
 
@@ -38,8 +37,8 @@ Lemma Estep_ind
         c <> c' -> P (EBranch Sd c' es0) (d, c, vn) (EBranch Sd c' es1)) ->
   (*     (forall (e : endpoint) (l : dir * ch * (value + nat) ) (e1 e' : endpoint), epred  e -> epred e1 ->
         ebisimilar e e1 -> P e1 l e' -> P e l e') ->*)
-     (forall (e : endpoint) (l : dir * ch * (value + nat) ) ( e' : endpoint), 
-         P e[e (ERec e).:ids] l e' -> P (ERec e) l e') ->
+     (forall (e : endpoint) (l : dir * ch * (value + nat) ) ( e' : endpoint), Estep (unfe e) l e' ->
+         P (unfe e) l e' -> P (ERec e) l e') ->
        forall (e : endpoint) (p : dir * ch * (value + nat)) (e0 : endpoint), Estep e p e0 -> P e p e0.
 Proof.
 intros. move : e p e0 H4. fix IH 4;intros. destruct H4.
@@ -51,16 +50,6 @@ intros. move : e p e0 H4. fix IH 4;intros. destruct H4.
 Qed.
 
 
-
-(*Lemma Estep_cont : forall e0 l e1, Estep e0 l e1 -> econtractive2 e0.
-Proof.
-move => e0 l e1. elim;try done;intros. simpl. move : H2.  move/forallzipP=>/=H'. apply/allP=>x /nthP=>Hn. specialize Hn with EEnd. destruct Hn. rewrite -H4.  apply : H'. repeat constructor. done. done.
-Qed.
-
-Lemma Estep_cont2 : forall e0 l e1, Estep e0 l e1 -> econtractive2 e1.
-Proof.
-move => e0 l e1. elim;try done;intros. apply (allP H). cc. simpl. move : H2.  move/forallzipP=>/=H'. apply/allP=>x /nthP=>Hn. specialize Hn with EEnd. destruct Hn. rewrite -H4.  apply : H'. repeat constructor. done. rewrite H0. done.
-Qed.*)
 
 
 Inductive EnvStep : env -> label -> env -> Prop := 
@@ -89,532 +78,20 @@ intros. Search _ fsub1set. move : H0. rewrite -!fsub1set.  intros. apply : fsubs
 Qed. 
 
 
-(*Definition try_fnd (d : env) (p : ptcp) := if d.[? p] is Some e then e else EEnd.*)
-
-(*Definition map_subst (i : nat) (d : env) g := [fmap x : (domf d) => (try_fnd d (val x))[s (project g (val x))//i]]. *)
-
-
-(*Lemma ptcps_subsitution_aux : forall g0 g1 i, ptcps_of_g g0 `<=` ptcps_of_g (substitution i g0 g1).
-Proof. elim;rewrite /=;try done;intros. rifliad. simpl. done. apply/fsetUSS.  done. eauto. 
-rewrite !big_map. apply/fsetUSS. done. apply/bigfcupsP. intros.  apply/fsubset_trans. apply : (H i0 H0). 
-3 : { apply/bigfcup_sup. done. done. }
-Qed.
-
-Lemma ptcps_subsitution_aux1 : forall g0 g1 i, ptcps_of_g (substitution i g0 g1) `<=` ptcps_of_g g0 `|` (ptcps_of_g g1).
-Proof. elim;rewrite /=;try done;intros. rifliad. Search _ (fset0 `|`_).  rewrite fset0U. done. rewrite /=. done.
-rifliad. simpl. Search _ (?a `<=` ?a `|` _). apply fsubsetUl. simpl. done. 
- apply/fsetUSS. rewrite fsubsetUl //=. done. done. done. rewrite -fsetUA. apply/fsetUSS. done. rewrite !big_map. apply/bigfcupsP. intros.  apply/fsubset_trans. apply : (H i0 H0). apply/fsetUSS. apply/bigfcup_sup. done. done. done. 
-Qed.
-
-(*Search _ (?A `<=` _ ->  _).
-Lemma squeeze : forall (S0 S1 : ptcps), S0 `<=` S1 -> S1 `<= S2 -> *)
-
-Lemma ptcps_substitution : forall g, ptcps_of_g g[GRec g] = g.
-Proof.
-intros. apply/fsetP=>k. 
-apply Bool.eq_true_iff_eq. split. intros. move : (ptcps_subsitution_aux1 g (GRec g) 0). move/fsubset_in. 
-have : ptcps_of_g g = ptcps_of_g (GRec g). done. move=><-. Search _ (?a`|`?a). rewrite fsetUid. move=>Hall.  apply Hall. done. 
-intros. move : (ptcps_subsitution_aux g (GRec g) 0). move/fsubset_in=>Hall. apply Hall. done. 
-Qed.*)
 
 
 
-
-(*Lemma project_end : forall g p, p \notin (ptcps_of_g g) -> lpreds size_pred g -> project g p.
-Proof.
-elim;intros;rewrite /=;try done.
-- eauto. eauto. 
-- simpl in H0. apply H in H0. rewrite /is_leaf in H0.  destruct H0. rewrite /is_leaf H0. auto. destruct H0. rewrite H0. eauto. by simpl in H1. 
-- move : H0.  rewrite /= !inE  !negb_or. rifliad. by rewrite (eqP H0) eqxx.  rewrite (eqP H2) eqxx. lia. 
-  intros. destruct (andP H3). apply H in H5 as [].  auto. destruct H5. eauto. eauto. 
-- move : H0. rewrite /= !inE !negb_or. rifliad. by rewrite (eqP H0) eqxx. rewrite (eqP H2) eqxx. lia.
-  rewrite big_map match_n. move/andP=>[] _. move/bigfcupP=>HH.   
-  have : p \notin ptcps_of_g (nth GEnd l 0). apply/negP=>HH'. apply : HH. exists (nth GEnd l 0). rewrite mem_nth //=.  
-  simpl in H1. lia. done. intros. edestruct H. 2 : { apply : x. } rewrite mem_nth //=. by simpl in H1;lia. simpl in H1. 
-  destruct (andP H1). apply (allP H4). rewrite mem_nth //=. rewrite H3. auto.  destruct H3. rewrite H3. eauto. 
-Qed.*)
-
-
-
-
-
-(*Lemma projmap_subst : forall g0  g i S, lpreds [::bound] g -> projmap S (g0[s g//i]) = map_subst i (projmap S g0) g.
-Proof.
-intros. rewrite /projmap /map_subst. apply/fmapP=>k. rewrite !mapf_if. 
-rewrite (@mapf_if _ _ _ (fun x =>  (try_fnd ([fmap p => project g0 (val p)]) (x))[s (project g (x))//i])) /=.
-rifliad. f_equal. rewrite project_subst. rewrite /try_fnd. rewrite mapf_if H0. done. done. 
-Qed.*)
-
-
-
-(*Lemma subst_diff : forall e0 e1 e2 k1 k2, k1 <> k2 -> e0[e e1//k1][e e2//k2] = e0[e e2//k2][e e1//k1].
-Proof. Admitted.*)
-
-
-(*Lemma in_subst : forall e e1 n, n \in fv e[s e1//n] = (n \in fv e) && (n \in fv e1).
-Proof. elim;intros;rewrite /= ?inE.
-- rifliad. rewrite eq_sym H /=. done. rewrite /= !inE eq_sym H /=. done. done.
-- rifliad. rewrite !inE neg_sym H0 /=. done. rewrite /= !inE H neg_sym H0 /=. done. rewrite H. done.
-- rewrite !big_map. induction l. rewrite !big_nil !inE. done. rewrite !big_cons !inE. rewrite H. rewrite IHl. destruct (n \in efv a) eqn:Heqn;rewrite Heqn /=.  
-  destruct (n \in efv e1) eqn:Heqn2;rewrite Heqn2 /=. done. lia. done. intros. apply H. auto. auto. 
-Qed.*)
-
-
-(*Lemma double_subst : forall e0 e1 e2 k1 , e0[e e1//k1][e e2//k1] = e0[e e1//k1].
-Proof. Admitted.*)
-
-
-
-(*Lemma ueqe_fv : forall e0 e1, paco2 Unravele bot2 e0 e1 -> fv e0 = fv e1. 
-Proof. 
-move => e0 e1 H. punfold H. induction H; auto. ich H. auto. rs. ich H0. apply H.  2 : { auto. }induction H2;rs;auto.  ich H0. pcofix CIH. intros.
-*)
 
 Lemma bool_iff : forall (b0 b1 : bool), b0 = b1 <-> (b0 <-> b1).
 Proof. move => [] [];split;auto;intros;try done. suff : false. by  move=>->. by rewrite -H. suff : false. by move=>->. rewrite H. done. 
 Qed.
 
 
-(*Lemma ueqe_fv2 : forall e0 e1, bisimilar e0 e1 ->  fv e0 = fv e1. 
-Proof. intros. punfold H. inversion H. subst. Admitted.*)
-(*
-Proof. move => e0 e1 H. punfold H. induction H;auto.  intros. intros. eapply  ueqe_fv. intros. apply : H2. apply : monotone_ueqe. punfold H. intros. ich PR. apply  H. eapply Unravele_r in H. punfold H. pfold.
-
-(*Lemma bound_ueqe : forall e0 e1, bound e0 -> e0 =f= e1*)
-Lemma ueqe_fv : forall e0 e1,  fv e0 = fv e1. 
-Proof. 
-move => e0 e1 r H H2. induction H2; auto. rs. auto. rs. rewrite !big_map.
-move : H1.  move/forallzipP=>HH. simpl in HH. intros. apply/fsetP=>k. rewrite !big_exists. rewrite bool_iff. split;intros.
-destruct (hasP H3). move : H4.  move/nthP=>Hnth. specialize Hnth with EEnd. destruct Hnth. apply/hasP. exists (nth EEnd gs' x0).
- rewrite H0 in H4. cc. erewrite <- H. apply : H5. specialize HH with EEnd EEnd x0. rewrite -H6. apply  HH. done. done. 
-
-destruct (hasP H3). move : H4.  move/nthP=>Hnth. specialize Hnth with EEnd. destruct Hnth. apply/hasP. exists (nth EEnd gs x0).
- rewrite -H0 in H4. cc. erewrite H. apply : H5. specialize HH with EEnd EEnd x0. rewrite -H6. apply  HH. done. cc. 
-rs. intros. apply/fsetP=>k. rewrite !inE. apply H in H0.  rewrite -H0. rewrite fv_subst. by rewrite !inE. 
-rewrite /bound in H1.  by apply/eqP. 
-
-rs. intros. apply/fsetP=>k. rewrite !inE. apply H in H0.  rewrite H0. rewrite fv_subst. by rewrite !inE. 
-rewrite /bound in H2.  by apply/eqP. 
-intros. rewrite IHUnravele1 //=. rewrite IHUnravele2 //=. Admitted.*)
-
-(*Lemma Unravele_r : forall e0 e1 r, paco2 Unravele bot2 e0 e1 -> paco2 Unravele r e0 e1.
-Proof. pcofix CIH.
-intros. pfold. apply : monotone_ueqe. punfold H0. intros. ich PR. right. apply CIH. done. Qed.
-*)
-
-(*Lemma ueqe_fv2 : forall e0 e1, bisimilar e0 =f= e1 ->  bound e0 -> bound e1 ->   fv e0 = fv e1. 
-Proof. intros. eapply  ueqe_fv. intros. apply : H2. apply : monotone_ueqe. punfold H. intros. ich PR. apply  H. eapply Unravele_r in H. punfold H. pfold.*)
-(*Lemma fv_eq1 : forall g p n, lpreds rec_pred g  -> n \in endpoint_fv (project g p) -> n \in gType_fv g. 
-Proof. Admitted.*)
-(*
-elim;rewrite /=;rs;intros;rewrite ?inE.
-- move : H0. rewrite !inE. done.
-- rewrite !inE in H0. done.
-- move : H1.  rifliad. rs. rewrite !inE. split_and. eapply H. cc. eauto. intros. destruct (eqVneq n0 n). subst. by rewrite H3 in H2. rewrite i /=. apply : H. cc. eauto.
--
- move : H1. rifliad. rs. intros. apply :H. cc. eauto. rs. intros. apply : H. cc. eauto. intros. apply : H. cc. eauto.
-- move : H1. rifliad. rs. rewrite !big_map !big_exists. move/hasP=>[];intros. apply/hasP. exists x. done. apply : H. done. cc. eauto.
-  rs. rewrite !big_map !big_exists. move/hasP=>[];intros. apply/hasP. exists x. done. apply : H. done. cc. eauto.
-- rewrite match_n big_map big_exists. intros. apply/hasP. exists (nth GEnd l 0). cc. apply : H. cc. cc. eauto.
-Qed.*)
-
-(*Lemma ppred_same_vars : forall g p, lpreds rec_pred g ->  same_vars (project g p).
-Proof. 
-elim;rewrite//=;rs;intros. rifliad;simpl;auto. all: try apply H; cc. rifliad;simpl;auto. all : try apply H; cc.
-rifliad. simpl. split_and. rewrite all_map. apply/allP=>e'. intros. simpl. erewrite nth_map. 
-
-apply/eqP. apply/ueqe_fv2/bisimP.  split_and. *)
-(*
-suff : (p \in a) || bisimilar (project (nth GEnd l 0) p) (project x p).
-rewrite !inE H1 /=.
-apply (allP (allP H2 _ p0)). 
-rewrite !inE H1 /= . rewrite big_map.
-rewrite all_map. apply/allP. intro.  intros. simpl. apply H. done. cc. simpl. 
-split_and. 
-apply/allP=>e'. intros. move : H3. move/mapP=>[]. intros. subst.  erewrite nth_map.  
-nth_lpreds 2 H0. simpl. move => HH. apply/eqP/ueqe_fv/ueqeP. split_and. cc. 
-rewrite all_map. apply/allP. intro.  intros. simpl. apply H. done. cc. 
-rewrite match_n. apply H. cc. cc. 
-Grab Existential Variables. all: repeat constructor.
-Qed.*)
-
-
-(*Lemma fv_eq2 : forall g p n, lpreds (same_varsg::rec_pred) g  -> n \in gType_fv g ->  n \in endpoint_fv (project g p). 
-Proof. Admitted.*)
-(*elim;rewrite /=;rs;intros;rewrite ?inE.
-- move : H0. rewrite !inE. done.
-- rewrite !inE in H0. done.
-- move : H1.  rifliad. rs. rewrite !inE. split_and. have : lpreds (same_varsg::rec_pred) g. cc. move/H=>HH. move : (HH p n0 H4). rewrite (eqP H1) !inE. lia. 
-  rs. rewrite !inE. split_and. apply H. cc.  done.
-- rewrite !inE. split_and. apply : H. cc.  done.
- rifliad. rs. apply : H. cc.  done. rs. apply H. cc.  done. apply H. cc. done. 
-- rifliad;rs. move : H1.  rewrite !big_map !big_exists. move/hasP=>[];intros. apply/hasP. exists x. done. apply : H. done. cc.  eauto.
-  move : H1.  rewrite !big_map !big_exists. move/hasP=>[];intros. apply/hasP. exists x. done. apply : H. done. cc. eauto.
-- move : H1. rewrite match_n big_map big_exists. intros.
-  destruct (hasP H1). move : H4. move/nthP=>Hnth. specialize Hnth with GEnd.
-  move : H1. move/hasP=>[]. intros. apply : H. cc. cc. nth_lpreds 0 H0. simpl. split_and. rewrite (eqP (allP H _ p0)) //=.
-Qed.
-*)
-
-(*Lemma fv_eq : forall g p, lpreds (same_varsg::rec_pred) g  -> gType_fv g = endpoint_fv (project g p).
-Proof. 
-intros. apply/fsetP=>k. Admitted. *)
-(*destruct (k \in fv g) eqn:Heqn. rewrite fv_eq2 //=. 
-destruct (k \in fv (project g p)) eqn:Heqn2. erewrite fv_eq1  in Heqn. done. cc. 
-eauto. done. 
-Qed.*)
 
 
 
-(*Lemma ppred_same_varsg : forall g, lpreds rec_pred g -> same_varsg g.
-Proof.  
-elim;rewrite /=;rs;intros;try done. apply H. cc. apply H.  cc.
-split_and. apply/allP=>e' Hin. 
-erewrite !fv_eq. apply/eqP. apply/ueqe_fv. apply/ueqeP. nth_lpreds 2 H0. simpl. split_and.
-cc. cc. apply/allP=>x. intros. apply H. done. cc. 
-Grab Existential Variables. all : repeat constructor.
-Qed.
-*)
-
-(*Lemma subst_distr : forall e e' e2 n n0, lpreds [::bound] e' ->  n<> n0 ->  fv e2 `<=` fv e ->  same_vars e -> e[s e' // n][s e2[s e' // n] // n0] = e[s e2//n0][s e' // n].  
-Proof. 
-elim.
-- intros. simpl. rs. rifliad. by rewrite -(eqP H3)  -(eqP H4)in H0.  simpl. rs. rifliad. rewrite subst_nop.  done. nth_lpreds 0 H.  move/eqP->. by rewrite !inE.  
-  rs. rewrite /= H4. done. rs. by rewrite /= H3 H4.
-- intros. done. 
-- intros. simpl. rs. rifliad. rs. by rewrite /= H5 H4. 
-  rs. rewrite /= H5 H4.  f_equal. f_equal. rewrite (eqP H4) in H2. rewrite subst_nop. done. apply/negP=>HH.  move : (fsubset_in H2 HH). rewrite /= !inE.  split_and. 
-  rs. rewrite (eqP H5) /= eqxx. rewrite -(eqP H5) H4. done. rs. rewrite /= H5 H4 /=.  f_equal.  rewrite H. done. cc. done. rs_in H2.  simpl in H2. apply/fsubsetP=>k. intros. move : (fsubset_in H2 H6). rewrite !inE. split_and. simpl in H3. done.
-- intros. simpl. rs. f_equal. apply H. cc. done. done. done.  
-- intros. simpl. rs. f_equal. rewrite -!map_comp. apply/eq_in_map=>l'. intros. simpl. apply H. done. cc. done. simpl in H2. apply/fsubsetP=>p. intros. move : (fsubset_in H2 H5).  rs.
-  rewrite big_map. rewrite big_exists.  move/hasP=>[]x. intros. simpl in H3. move : p0. move/nthP=>Hnth. specialize Hnth with EEnd. destruct Hnth.
-  suff : p \in fv (nth EEnd l 0). split_and. move : (allP H8 _ H4). move/eqP.   move=><-. done. rewrite -H7 in q. have : nth EEnd l x0 \in l.  cc. intros.
-  split_and.  move :(allP H8 _ x1).  move/eqP. move=>->. done. simpl in H3. split_and. apply (allP H6). done. 
-Qed.*)
-
-(*Lemma double_inner_subst: forall e e' e2 n n0, lpreds [::bound] e' ->  n<> n0 ->  efv e2 `<=` efv e ->  same_vars e -> e[e e2[e e' // n] // n0][e e' // n] = e[e e2//n0][e e' // n].  
-Proof. 
-elim.
-- intros. simpl. rifliad. rewrite double_subst. done. 
-- intros. done. 
-- intros. simpl. rifliad. simpl. rifliad. simpl in H2. f_equal. f_equal. rewrite (eqP H5) in H3. rewrite subst_nop. done. apply/negP=>HH.  move : (fsubset_in H2 HH). rewrite !inE.  rewrite (eqP H5) eqxx. done.  f_equal.  rewrite H. done. cc. done. simpl in H2. apply/fsubsetP=>k. intros. move : (fsubset_in H2 H6). rewrite !inE. split_and. 
-- intros. simpl. f_equal. simpl in H3. done. 
-- intros. simpl. f_equal. apply : H. cc. done. simpl in H2.  done. simpl in H3. done.
-- intros. simpl. f_equal. rewrite -!map_comp. apply/eq_in_map=>l'. intros. simpl. apply H. done. cc. done. simpl in H2. apply/fsubsetP=>p. intros. move : (fsubset_in H2 H5). 
-  rewrite big_map. rewrite foldr_exists.  move/hasP=>[]x. intros. simpl in H3. move : p0. move/nthP=>Hnth. specialize Hnth with EEnd. destruct Hnth.
-  suff : p \in efv (nth EEnd l 0). split_and. move : (allP H8 _ H4). move/eqP.   move=><-. done. rewrite -H7 in q. have : nth EEnd l x0 \in l.  cc. intros.
-  split_and.  move :(allP H8 _ x1).  move/eqP. move=>->. done. simpl in H3. split_and. apply (allP H6). done. 
-Qed.*)
-
-
-(*Lemma ueqe_subst : forall e0 e1 e' n, (lpreds [::bound])e' ->  e0 =f= e1 ->  e0[e e'//n] =f= e1[e e'//n].
-Proof.  
-elim.
-3 : {  simpl.  intros. rifliad. pfold. constructor. left. rewrite (eqP H2).
-- intros. simpl. rifliad. punfold H0. inversion H0. subst. simpl. rewrite H1. done. subst. simpl. rewrite eq_sym.  H1. 
-pfold. constructor. right.  apply : CIH. cc. cc. 
-pfold. constructor. by rewrite !size_map.
-have : (zip (map (fun e0' => (e0')[e e' // n]) gs)  (map (fun e0' => (e0')[e e' // n]) gs')) = map (fun p => (p.1[e e'//n ],p.2[e e'//n])) (zip gs gs'). clear H2 CIH H H0. elim : gs gs'.  destruct gs'. done. by simpl.  destruct gs'. done.
-simpl.  f_equal. apply H. move=>->. move : H2. move/forallzipP=>HH. apply/Forall_forall. simpl in HH. intros. right. 
-move : H1. move/nthP=>HH'. specialize HH' with (EEnd,EEnd). destruct HH'. rewrite -H2. erewrite nth_map. simpl. apply : CIH. cc.
-erewrite nth_zip. simpl. move : H1.  rewrite size_map size_zip minnE H nat_fact. intros. 
-(*rewrite -H in H1.  cc.
- cc. erewrite nth_zip.  simpl. move : H2.  rewrite size_map size_zip minnE H nat_fact. intros. cc. done.
-rewrite nth_zip /=. *) suff : upaco2 Unravele bot2 (nth EEnd gs x0) (nth EEnd gs' x0). case. eauto. done. apply : HH. done. rewrite H. done. done.
-move : H1. by rewrite size_map size_zip minnE H nat_fact. 
-rifliad. 
-pfold. constructor. ich H. rewrite (eqP H1). right. 
- rewrite -(@subst_nop (g[e ERec n g // n]) e' n). apply : CIH. cc. rewrite -(eqP H1). done. 
-rewrite in_subst negb_and. apply/orP. right. by rewrite /= !inE. 
-ich H. pfold. constructor.  right. have : ERec n0 g[e e' // n] = (ERec n0 g)[e e' //n].  rewrite /= H1. done. move=>->. rewrite subst_distr.  
-apply : CIH. cc. done.
-rifliad.*)
 
 Ltac kb d := let Heqn := fresh "Heqn" in destruct d eqn:Heqn;rewrite ?Heqn //=. 
-
-(*TODO*)
-(*Lemma ptcp_subst : forall (A : eqType) (B : choiceType)  x p g1 i (F : A -> {fset B}) , (p \in F (x)[g g1 // i]) = (p \in F x) || ((i \in fv x) && (p \in F g1)).
-Proof.
-elim;rewrite /=;intros.
-- rifliad. by rewrite !inE (eqP H) eqxx /=. by rewrite !inE eq_sym H. by rewrite !inE. 
-- rifliad. rewrite /= !inE (eqP H0) eqxx /=. lia. rewrite /= !inE. rewrite neg_sym. rewrite (negbT H0) /= H. done.
-  rewrite !inE H. by rewrite orbA.  
-- rewrite !big_map. rewrite !inE. kb (p == ptcp_from a). kb (p == ptcp_to a). 
-  clear Heqn Heqn0. induction l. rewrite !big_nil !inE. lia. 
-  rewrite !big_cons !inE H //=. rewrite IHl. rewrite orbA. kb (p \in ptcps_of_g a0).  kb (i \in fv a0). kb (p \in ptcps_of_g g1). lia. 
-  by rewrite andbC /= orbC /=.  intros. apply H. auto. 
-Qed.*)
-
-
-(*Lemma ptcp_subst : forall x p g1 i, (p \in ptcps_of_g (x)[s g1 // i]) = (p \in ptcps_of_g x) || ((i \in fv x) && (p \in ptcps_of_g g1)).
-Proof.
-elim;rewrite /=;intros.
-- rifliad. by rewrite !inE (eqP H) eqxx /=. by rewrite !inE eq_sym H. by rewrite !inE. 
-- rifliad. rewrite /= !inE (eqP H0) eqxx /=. lia. rewrite /= !inE. rewrite neg_sym. rewrite (negbT H0) /= H. done.
-  rewrite !inE H. by rewrite orbA.  
-- rewrite !big_map. rewrite !inE. kb (p == ptcp_from a). kb (p == ptcp_to a). 
-  clear Heqn Heqn0. induction l. rewrite !big_nil !inE. lia. 
-  rewrite !big_cons !inE H //=. rewrite IHl. rewrite orbA. kb (p \in ptcps_of_g a0).  kb (i \in fv a0). kb (p \in ptcps_of_g g1). lia. 
-  by rewrite andbC /= orbC /=.  intros. apply H. auto. 
-Qed. *)
-
-
-(*Lemma big_ptcp_subst : forall l p g1 i, (p \in \bigcup_(j <- l) ptcps (j)[s g1 // i]) = (p \in \bigcup_(j <- l)  ptcps j) || ((i \in \bigcup_(j <- l) fv j) && (p \in ptcps g1)).
-Proof.
-elim;intros;rewrite /= ?big_nil ?big_cons !inE. lia. rewrite H !ptcp_subst orbA. kb (p \in ptcps a). kb (i \in fv a).  
-kb (p \in ptcps g1). lia. kb ((p \in \bigcup_(j <- l) j)). kb ( (p \in \bigcup_(j <- l) g1)). rewrite andbC /=. done. lia. 
-Qed.*)
-
-(*Lemma big_ptcp_subst_if : forall l g1 i, (\bigcup_(j <- l) ptcps (j)[s g1 // i]) = 
-                                                      if i \in \bigcup_(j <- l) fv j
-                                                          then \bigcup_(j <- l)  ptcps j `|` (ptcps g1) 
-                                                          else \bigcup_(j <- l) ptcps j.
-Proof.
-elim;intros;rewrite /= ?big_nil ?big_cons !inE. done. rewrite H !ptcps_subst. case_if; rewrite H0 /=.  rifliad. fsetPtac. 
-fsetPtac. case_if. fsetPtac. fsetPtac.
-Qed.
-*)
-(*Lemma same_vars_subst : forall e0 e1 n, same_vars e0 -> same_vars e1  -> same_vars e0[s e1//n].
-Proof. elim;rewrite /=;rs;intros.  rifliad. done. rifliad. simpl. rs. auto. auto.
-split_and. rewrite all_map. apply/allP=>g' Hin. simpl. erewrite nth_map. rewrite !fv_subst. apply/eqP. f_equal. 
-by apply/eqP/(allP H2). Admitted.*)
-(*Lemma ueqe_subst : forall e0 e1 e' n, same_vars e0 -> same_vars e1 -> bound e' ->  e0 =f= e1 ->  e0[s e'//n] =f= e1[s e'//n].
-Proof. 
-pcofix CIH.  intros. punfold H3. ich H3;simpl;auto.  ich H.
-pfold. constructor. right.  apply : CIH. cc. cc. cc. done.
-pfold. constructor. by rewrite !size_map.
-have : (zip (map (fun e0' => (e0')[s e' // n]) gs)  (map (fun e0' => (e0')[s e' // n]) gs')) = map (fun p => (p.1[s e'//n ],p.2[s e'//n])) (zip gs gs'). clear H2 CIH H H0 H1 H4. elim : gs gs'.  destruct gs'. done. by simpl.  destruct gs'. done.
-simpl.  f_equal. apply H. move=>->. move : H4. move/forallzipP=>HH. apply/Forall_forall. simpl in HH. intros. right. 
-move : H3. move/nthP=>HH'. specialize HH' with (EEnd,EEnd). destruct HH'. rewrite -H4. erewrite nth_map. simpl.
-erewrite nth_zip. simpl. move : H3.  rewrite size_map size_zip minnE H nat_fact. intros. simpl in H0. split_and.
-apply : CIH. 
-apply (allP H6). rewrite -H in H3.  cc. simpl in H1. split_and. apply (allP H7).  cc. done. 
-(*rewrite -H in H1.  cc.
- cc. erewrite nth_zip.  simpl. move : H2.  rewrite size_map size_zip minnE H nat_fact. intros. cc. done.
-rewrite nth_zip /=. *) suff : upaco2 Unravele bot2 (nth EEnd gs x0) (nth EEnd gs' x0). case. eauto. done. apply : HH. done. rewrite H. done. done.
-move : H3. by rewrite size_map size_zip minnE H nat_fact. rs. 
-rifliad. 
-pfold. constructor. ich H. rewrite (eqP H3). right. 
-rewrite -(@subst_nop _ (g[s ERec n g // n]) e' n). apply : CIH. cc. Admitted. *)
-(*rewrite -(eqP H1). done. 
-rewrite in_subst negb_and. apply/orP. right. by rewrite /= !inE. 
-ich H. pfold. constructor.  right.  have : ERec n0 g[e e' // n] = (ERec n0 g)[e e' //n].  rewrite /= H1. done. move=>->. rewrite subst_distr. 
-apply : CIH. cc. rewrite -H2.  done. cc. lia. simpl. apply/fsubsetP=>k. rewrite !inE. split_and. done. rewrite !inE. done.
-rifliad.*)
-
-
-
-(*pfold. constructor. ich H. right. rewrite subst_diff. apply : CIH. cc. move : H0. unlock lpreds. rewrite /=. nth_lpreds 0 H1. rewrite /bound. split_and.
-rewrite Substitutions.efv_subst. simpl in H. done. rewrite /ebound. simpl. rewrite Substitutions.efv_subst.
-simpl in H.  rewrite -(eqP H). apply/eqP/fsetP=>k. rewrite !inE. destruct (eqVneq k n0);rewrite /=. done.
-destruct (eqVneq k n);rewrite /=. subst.
- Check (@subst_nop (g[e ERec n0 g // n]) e' n0). apply : CIH. rewrite -(eqP H2). cc. cc.  rewrite -(eqP H2). done.
- rewrite Substitutions.efv_subst. by rewrite /= !inE. cc. rewrite -(eqP H2). cc.
-
-pfold. constructor. right. apply : CIH.
-move : 
-rewrite map_zip.
-right. apply : CIH. move => e0 e1 e' n.*)
-
-
-
-(*Add constraint that g1 participants is subset of g0's participants*)
-
-Lemma fresh_for : forall S S', S' `<=` S -> fresh S \notin S'.
-Proof.  intros. rewrite /fresh. destruct (atom_fresh_for_list S). apply/negP=>HH. apply : n. by apply (fsubset_in H). Qed.
-
-
-
-
-
-(*Lemma project_pred_ptcps : forall a gs i p, lpreds (rec_pred) (GBranch a gs) -> p \in (fv (GBranch a gs)) -> i < size gs -> p \in  fv (nth GEnd gs i).
-Proof. intros.  destruct (atom_fresh_for_list ([::ptcp_from a;ptcp_to a])). nth_lpreds 0 H=>HH. move : HH. 
-rewrite /rec_pred.
-rewrite !(@fv_project_eq _ x).  move : n. move/negP. rewrite !inE. rewrite /=. split_and. move : HH. rewrite (negbTE H1) (negbTE H3). 
-Qed.
-
- Lemma project_pred_ptcps2 : forall a gs i p, lpreds rec_pred (GBranch a gs) -> i < size gs ->  (p \in  fv (nth GEnd gs i)) ->  (p \in fv (GBranch a gs)).
-Proof. intros.  rewrite /= big_map.  rewrite foldr_exists. apply/hasP.  exists (nth GEnd gs i). cc. done. 
-Qed.
-
-
-Lemma project_pred_ptcps_set : forall a gs i, lpreds rec_pred (GBranch a gs) -> i < size gs -> fv (GBranch a gs) = fv (nth GEnd gs i).
-Proof.
-intros. apply/fsetP. move => x.  destruct ((x \in fv (nth GEnd gs i))) eqn:Heqn.
-erewrite project_pred_ptcps2. done. cc. eauto. done. destruct ( (x \in fv (GBranch a gs)))eqn:Heqn2. erewrite project_pred_ptcps in Heqn. done. have : ipred x (GBranch a gs).  cc. intros.  cc. cc. cc. 
-Qed.*)
-
-
-(*Lemma full_unf : forall e n, econtractive (ERec n e) ->  full_eunf (ERec n e) = full_eunf (e[s ERec n e//n]).
-Proof. intros. simpl in H.  split_and. rewrite /= -iterS iterSr /= emu_height_subst //=. Qed.
-
-Lemma next_unf : forall e n, econtractive (ERec n e) -> next (ERec n e) = next (e[s ERec n e//n]).
-Proof. intros. rewrite /next full_unf //=. Qed.
-
-Lemma act_unf : forall e n, econtractive (ERec n e) -> act_of (ERec n e) = act_of (e[s ERec n e//n]).
-Proof. intros. rewrite /act_of   full_unf //=. Qed.
-
-*)
-
-(*Lemma act_unf : forall e sigma, act_of e = act_of (e[e sigma]).
-Proof.
-elim;simpl;intros.   destruct n.  asimpl. simpl. done. simpl. done.
-done. done. done. asimpl.
-Lemma bisimilar_unf : forall e , bisimilar (ERec e) (e[ERec e.:ids]). 
-Proof.
-pcofix CIH. intros. pfold. constructor. simpl. 
-elim;intros.
-*)
-(*
-intros. pfold. punfold H0.  inversion H0. simpl in H.  split_and.  constructor;rewrite //=.
-rewrite -H1 act_unf //=. split_and. 
-rewrite -H2 next_unf //=. split_and. 
-rewrite next_unf //=. split_and.*)
-(*Qed.*)
-
-
-Lemma f1eq : forall (n n0 : nat), [fset n] = [fset n0] -> n = n0.
-Proof. 
-intros. destruct (eqVneq n n0).   done. have : (n \in [fset n]) = (n \in [fset n0]). move : H.  move/fsetP=>Hff. rewrite -Hff //=.  rewrite !inE. rewrite (negbTE i) //=. Qed.
-
-
-(*Lemma notin_subst : forall (a a2: endpoint) i, i \notin fv a -> a[s a2 // i] = a.
-Proof.
-elim;rewrite/=;rs;intros. move : H. rewrite !inE eq_sym. move/negbTE=>-> //=. done.
-move : H0. rewrite !inE. move/orP=>[]. rewrite eq_sym. move=>-> //=. intros. rifliad.
-rewrite H //=. f_equal. rewrite H //=. f_equal.  move : H0. rewrite big_map. induction l. rewrite !big_nil //=. 
-rewrite !big_cons.rewrite !inE.  split_and. simpl. f_equal. apply H. done. done. apply IHl. auto. done. 
-Qed.*)
-
-(*Lemma double_subst : forall (e0 : endpoint) e1 e2 i, i \notin fv e1  -> e0[s e1 // i][s e2 // i] = e0[s e1 // i].
-Proof.
-intros. rewrite subst_nop. done. rewrite /bound in H.  rewrite fv_subst //=. rewrite !inE //=. by apply/eqP. 
-Qed. 
-
-Lemma eunf_subst : forall e0 e1 k, bound e1 ->  eunf e0[s e1 // k] = (eunf e0)[s eunf e1 // k].
-Proof.
-elim;rewrite /=;rs;intros.
--  rifliad. 
-- done. 
-- rifliad. rs. rewrite (eqP H1) double_subst.  done. rewrite [_[s eunf e1 // _]]subst_nop. done. rewrite fv_subst.  rewrite !inE //=.
-rs. rewrite /bound in H0. rewrite (eqP H0).
-
-Lemma bisim_unf_act : forall e0 e1 e' i, act_of e0 = act_of e1 -> act_of e0[s e'// i] = act_of e1[s e'//i].
-Proof.
-intros. move : H.  rewrite /act_of. Print full_eunf.
-elim;rewrite /=;intros;rs.  move : H. rewrite {1}/act_of /=. destruct e1. rewrite {1} /act_of /=. case. 
-intros. subst. rewrite /act_of /=. rs. done. done. all : try done. rewrite /act_of /=. rs. 
-rewrite -iterS iterSr /=. /=. intros .destruct (full_eunf e1);try done;intros. rifliad. rifliad.
-intros. rewrite /act_of.
-remember (emu_height e0). remember (emu_height e1). move : n e0 e1 Heqn Heqn0 H. elim.
-move => e0 e1. remember (emu_height e1). move : n Heqn. elim. simpl. 
-intros. destruct e0,e1;rs;rewrite /=. move : H. rs. Search _ (_ = [fset _]). move => Hn0.
-destruct (n == n0) eqn:Heqn2. 
-- rifliad. move : H1. rewrite -(eqP H). rewrite eq_sym Heqn2 //=. 
-  move : H.  rewrite -(eqP H1) Heqn2 //=. simpl. apply f1eq in Hn0. subst. rewrite eqxx //= in Heqn2. 
- * rs_in H. by apply fset_nil in H.  done. done. all : try done. rs_in H. symmetry in H. by apply fset_nil in H. 
-  intros.    simpl in H1. simpl in H. simpl. 
-Search _ ([fset _]).
-simpl. 2 : { have : (n \in [fset n]) = (n \in [fset n0]). move : Hn0.  move/fsetP=>Hff. rewrite -Hff. done. 
-        rewrite !inE Heqn2. done.}
-[fset _]). intros. (move => e0 e1 H H1. 
-remember (emu_height e1). 
-rewrite /=.
-intros.
-elim;intros. destruct e1;rewrite /=;rs;try done
-intros. rifliad. rewrite -(eqP H1) in H2. rs_in H. have :( n \in [fset n]) = (n \in [fset n0]).  move : H. move/fsetP.
-move=>HH.  rewrite -HH. rewrite !inE. done. rewrite !inE eq_sym H2 //=. 
-intros. exfalso. inversion H.  move : H. 
-Lemma bisim_unf : forall e0 e1 e' i, econtractive e0 -> econtractive e1 -> fv e0 = fv e1 -> bisimilar e0 e1 -> bisimilar e0[s e'// i] e1[s e'//i].
-Proof.  
-intros. rewrite econtractive_subst. punfold H0. inversion H0. subst. pfold. constructor.
-
-rewrite act_
-intros.*) 
-
-(*Check next.
-Print next.
-
-Lemma bound_branch : forall a gs g, bound (GBranch a gs) -> g \in gs -> bound g.
-Proof.
-intros. move : H. rewrite /bound /=. rs. rewrite big_map. intros. apply/eqP/fsetP=>k. apply/bool_iff.
-split. rewrite -(eqP H). intros. rewrite big_exists. apply/hasP. exists g. done. done.
-rewrite !inE. done.
-Qed.
-
-Print project_pred.
-
-Fixpoint project_pred2 (S : fset_ptcp)  (g : gType) :=
-  match g with
-  | GRec _ g0 => project_pred2 S g0
-  | GMsg _ _ g0 => project_pred2 S g0
-  | GBranch a gs =>
-      (all
-        (fun g' : gType => all (fun p : ptcp => bisimilar (project (nth GEnd gs 0) p) (project g' p)) S)
-        gs) && (all (project_pred2 S) gs)
-  | _ => true
-  end.*)
-
-(*Lemma traverse_project_pred_unf : forall g0 g1 i, lpreds (svpred::rec_pred) g0 -> project_pred2 (ptcps g1) g0 -> lpreds (bound::ppred::nil) g1 -> ppred g0[s g1// i].
-Proof. 
-intros. destruct (i \notin fv g0) eqn:Heqn. rewrite subst_nop //=. split_and. cc.
-elim : g0 g1 i Heqn H H0 H1;intros;rewrite /=. 
-- move : Heqn. rewrite /= !inE. move/negbT. rewrite !inE. rewrite eq_sym.  rs. move=>->. cc. done. 
-- move : Heqn. rs.  rewrite /= !inE. move/orP/orP. rewrite !inE. split_and. have: n == i = false by lia. move=>->. 
-  simpl. apply H. by rewrite H4. cc. 
-  split_and. cc.   (*nth_lpreds 0 H0. rewrite /bound. rs. move/eqP/fsetP.  move => HH. have : i \in fset0.  rewrite -HH !inE H3 H4 //=. 
-  rewrite !inE //=. done. cc. *)rs. simpl in H1. apply H. cc. cc. simpl in H1. done. cc.
-- rewrite /= !big_map !all_map big_ptcp_subst_if. split_and. rifliad. clear Heqn.
- * apply/allP=> x' Hin. simpl. apply/allP=>p. rewrite !inE. intros. 
-   nth_lpreds 3 H0. simpl. split_and. destruct (orP H4). 
-  ** rewrite (eqP H7). rewrite (@nth_map _ GEnd). rewrite !project_subst. erewrite project_tw0.
-     erewrite (@project_tw0 x').
-     rewrite !subst_nop. apply (allP (allP H5 _ Hin)). rewrite !inE. apply/orP. left. apply/eqP. reflexivity.
-     rewrite -fv_eq. 
-(*have : bound x'. apply : bound_branch. cc. done. rewrite /bound. move/eqP=>->. rewrite !inE //=. 
-     cc. *)
-rewrite -fv_eq. have : bound (nth GEnd l 0). apply : bound_branch. cc. cc. rewrite /bound. move/eqP=>->. rewrite !inE //=.
-     cc. cc. rewrite /npred. apply/rewrite fresh_for. apply/fsubsetP=>x. intros. rewrite !inE. apply/orP. right.
-     apply/orP. left. rewrite big_exists. apply/hasP. exists x'. done. done.
-     rewrite /npred. apply/fresh_for. apply/fsubsetP=>x. intros. rewrite !inE. apply/orP. right.
-     rewrite big_map big_exists. apply/hasP. exists x'. done. done.
-
-     cc.
-     rewrite /npred. apply/fresh_for. apply/fsubsetP=>x. intros. rewrite !inE. apply/orP. right.
-     apply/orP. left. rewrite big_exists. apply/hasP. exists (nth GEnd l 0). cc. done. 
-     rewrite /npred. apply/fresh_for. apply/fsubsetP=>x. intros. rewrite !inE. apply/orP. right.
-     rewrite big_map. rewrite big_exists. apply/hasP. exists (nth GEnd l 0). cc. done. 
-     cc. cc. cc.
-  ** clear H4. 
-  ** split_and. destruct (orP H8). by rewrite (negbTE H7) (negbTE H9) /= in H4. 
-     destruct (orP H4). rewrite (@nth_map _ GEnd). rewrite !project_subst. 
-     rewrite !subst_nop.  apply (allP (allP H5 _ Hin)). 
-     rewrite !inE. apply/orP. right. split_and. eauto. eauto. 
-     apply/orP. right. rewrite big_map. done. 
-
-     rewrite -fv_eq.
-
-     have : bound x'. apply : bound_branch. cc. done. rewrite /bound. move/eqP=>->. rewrite !inE //=. 
-     cc. rewrite -fv_eq. have : bound (nth GEnd l 0). apply : bound_branch. cc. cc. rewrite /bound. move/eqP=>->. rewrite !inE //=.
-     cc. cc. cc. cc. 
-     
-     rewrite (@nth_map _ GEnd). rewrite !project_subst. 
-     rewrite !subst_nop. simpl in H1. split_and. apply (allP (allP H11 _ Hin)). eauto. 
-
-     rewrite -fv_eq.
-
-     have : bound x'. apply : bound_branch. cc. done. rewrite /bound. move/eqP=>->. rewrite !inE //=. 
-     cc. rewrite -fv_eq. have : bound (nth GEnd l 0). apply : bound_branch. cc. cc. rewrite /bound. move/eqP=>->. rewrite !inE //=.
-     cc. cc. cc. cc.
-- rs_in Heqn. by rewrite big_map H3 in Heqn.
-- apply/allP=>x.  intros. simpl. rs. apply H. done. apply/negP/negP. nth_lpreds 1 H0. simpl. move => HH.  
-  split_and. move : Heqn. move/negP/negP. rs. rewrite big_map big_exists. move/hasP=>[]. intros.
-  rewrite -(eqP (allP H4 _ H3)). move : p. move/nthP=>Hnth. specialize Hnth with GEnd. destruct Hnth. rewrite -H7 in q. 
-  have : nth GEnd l x1 \in l. cc. move=> Hin. 
-  rewrite -(eqP (allP H4 _ Hin)) in q. done. 
-  cc. simpl in H1. split_and. apply (allP H5 _ H3). cc.
-Qed.*)
-
 
 
 
@@ -654,53 +131,36 @@ apply/size_pred_subst_ren. auto. done.
 Qed.
 
 
-(*Lemma spred_bisim : forall g0 g1, contractive2 g0 -> contractive2 g1 -> bisimilarg g0 g1 -> spred g0 -> spred g1.
-Proof.
-elim;intros.
-- punfold H1. inversion H1. subst. destruct g1;try done. simpl. simpl in *. split_and. rewrite nextg_unf  //=in H4.
-B*)
 Print step.
-Lemma step_tr : forall g vn g', step g vn g' ->  exists s, Tr (s ++ [::vn.1]) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) s.
+Lemma step_tr : forall g vn g', step g vn g' -> size_pred g ->  exists s, Tr (s ++ [::vn.1]) g /\ Forall (fun a => (ptcp_to a) \notin vn.1) s.
 Proof.
 move => g vn g'. elim.
 - intros. exists nil. rewrite /=. auto.
 - intros. exists nil. rewrite /=. split;auto.  apply TRBranch with (n:=n)(d:=GEnd). done. done.
-- intros.  destruct H1,H1.  exists (a::x). rewrite /=. auto. 
-- intros. move : H2.  move/forallzipP=>/=Hall. specialize Hall with GEnd 0.
+- intros.  simpl in H2. apply H0 in H2. destruct H2,H2.  exists (a::x). rewrite /=. auto. 
+- intros. move : H1.  move/forallzipP=>/=Hall. specialize Hall with GEnd 0.
   have : exists s0 : seq action,
            Tr (s0 ++ [:: l.1]) (nth GEnd gs 0) /\ Forall (fun a : action => ptcp_to a \notin l.1) s0. apply Hall;eauto.
-  cc. move => []. intros. exists (a::x). destruct p.  split;auto. simpl. econstructor. 2 : { eauto. }  cc.
-- intros. destruct H1,H1. exists x. split;auto. 
+  simpl in H3.  split_and. simpl in H3. split_and. apply (allP H4). apply/mem_nth. done. move => []. intros. exists (a::x). destruct p.  split;auto. simpl. econstructor. 2 : { eauto. }    simpl in H3. split_and. 
+- intros.  simpl in H1. eapply size_pred_subst in H1.  apply H0 in H1. destruct H1,H1. exists x. split;auto. case. done. done. 
 Qed.
 
 
-Lemma distinct_ch : forall g vn g', step g vn g' -> exists s, Tr (s ++ [::vn.1]) g /\  Forall (fun a =>  (action_ch a) != (action_ch vn.1)) s.
-Proof. intros. edestruct (step_tr). eauto. destruct H0. exists x. split;auto. inversion H1. done. apply : ch_diff. Check ch_diff.  cc. 
-subst. eauto.  auto. 
+Lemma distinct_ch : forall g vn g', step g vn g' -> size_pred g -> Linear g -> exists s, Tr (s ++ [::vn.1]) g /\  Forall (fun a =>  (action_ch a) != (action_ch vn.1)) s.
+Proof. intros. edestruct (step_tr). eauto. done.  destruct H2. exists x. split;auto. inversion H3. done. apply : ch_diff. eauto. subst. eauto. 
+auto. 
 Qed.
 
-Lemma distinct_ch_msg : forall a u g vn g', step (GMsg a u g) vn g' -> ptcp_to a \notin vn.1 -> (action_ch a) != (action_ch vn.1).
-Proof. intros.  edestruct distinct_ch. eauto.   destruct H1. move : H2. move/Forall_forall=>HH.  destruct x. simpl in H1. inversion H1. subst. rewrite !inE in H0. split_and. simpl in H1.  inversion H1. subst. apply HH. rewrite !inE. done.
+Lemma distinct_ch_msg : forall a u g vn g', step (GMsg a u g) vn g' -> size_pred g -> Linear (GMsg a u g) -> ptcp_to a \notin vn.1 -> (action_ch a) != (action_ch vn.1).
+Proof. intros.  edestruct distinct_ch. eauto. done.    done. destruct H3. move : H4. move/Forall_forall=>HH.  destruct x. simpl in *. inversion H3. subst. rewrite !inE in H2. split_and.  apply HH. simpl in H3.  inversion H3. subst. rewrite !inE. done.
 Qed.
 
-Lemma distinct_ch_branch : forall a gs vn g', step (GBranch a gs) vn g' -> ptcp_to a \notin vn.1 ->  (action_ch a) != (action_ch vn.1).
-Proof. intros.  edestruct distinct_ch. eauto. destruct H1. move : H2. move/Forall_forall=>HH.  destruct x. simpl in H1. inversion H1. subst. rewrite !inE in H0. split_and. simpl in H1.  inversion H1. subst. apply HH. rewrite !inE. done.
+Lemma distinct_ch_branch : forall a gs vn g', step (GBranch a gs) vn g' -> size_pred (GBranch a gs) -> Linear (GBranch a gs) -> ptcp_to a \notin vn.1 ->  (action_ch a) != (action_ch vn.1).
+Proof. intros.  edestruct distinct_ch. eauto. auto. done. destruct H3. move : H4. move/Forall_forall=>HH.  destruct x. simpl in* . inversion H3. subst. rewrite !inE in H2. split_and. simpl in*.  inversion H3. subst. apply HH. rewrite !inE. done.
 Qed.
 
-(*Fixpoint clean e := 
-match e with 
-| EMsg d c v e0 => EMsg d c v (clean e0)
-| EBranch d c es => EBranch d c (map clean es)
-| ERec e0  => if clean e0 == EVar 0 then EEnd else if 0 \in endpoint_fv e0 then ERec (clean e0) else clean e0
-| EVar j => EVar j
-| EEnd => EEnd
-end.*)
-
-Print up_gType_gType.
-
-Print gType_fv. 
+(*
 Open Scope nat_scope.
-Print gType_fv.
 Fixpoint efvg (g : endpoint) : {fset (nat * bool)} := 
 match g with 
 | EMsg _ _ u g0 => [fset (n,true) | n in endpoint_fv g  (* (fvg g0) *)]
@@ -735,7 +195,7 @@ intros. split;intros; auto using eguarded_fvg1, eguarded_fvg2.
 Qed.
 
 Definition injective_for (S : {fset nat}) (f : nat -> nat) := forall n0 n1, n0 \in S -> n1 \in S -> f n0 = f n1 -> n0 = n1. 
-
+*)
 
 
 Inductive NG : gType -> Prop :=
@@ -755,45 +215,34 @@ Definition no_step g := forall l g', ~ step g l g'.
 
 Definition no_estep g := forall l g', ~ Estep g l g'.
 
-Inductive no_step_f  (r : gType -> Prop) : gType -> Prop :=
+(*Inductive no_step_f  (r : gType -> Prop) : gType -> Prop :=
  | no_step_c g : no_step g -> no_step_f r g
  | no_step2 g: r (g [g (GRec g).:ids]) -> no_step_f r (GRec g).
 
 
-Notation NoStep := (paco1 no_step_f bot1).  Check paco2. 
+Notation NoStep := (paco1 no_step_f bot1).  Check paco2.
 
 Lemma no_step_lt : forall g (r1 r2 : gType -> Prop ), (forall g, r1 g -> r2 g) -> no_step_f r1 g -> no_step_f r2 g.
 Proof.
 intros. inversion H0. subst. constructor. done.  
 subst. apply no_step2.  apply H.  done.
-Qed. 
+Qed. *)
 
 
 Inductive MUE : endpoint -> Prop :=
 | MU_end : MUE EEnd
-| MU_mu e : MUE (e [e (ERec e) .: ids])  -> MUE (ERec e).
+| MU_mu e : MUE (unfe e)  -> MUE (ERec e).
 Hint Constructors MUE. 
 Lemma MUE1 : forall e i sigma, ~ eguarded i e -> sigma i = EEnd -> MUE (e [e sigma]).
 Proof.
 elim;intros; simpl in *. have : n = i. lia. move=>->. rewrite /= H0. done. done.
-asimpl. constructor. 
-
-have : 
- [eERec ([eEVar 0 .: sigma >> ⟨e ↑ ⟩] e) .: sigma] e =
-
-([e(ERec ([eEVar 0 .: sigma >> ⟨e ↑ ⟩] e))..] ([eEVar 0 .: sigma >> ⟨e ↑ ⟩] e)).
-asimpl.  done. intros. rewrite /= -x. 
-simpl in *.
-apply : H.  eauto.  simpl in *. done.
+asimpl. constructor. rewrite /unfe. asimpl. apply : H. eauto. 
+asimpl.  rewrite H1. done. 
 done.
 done.
 Qed.
 
 
-
-(*Lemma MUE_cont : forall e, MUE e -> econtractive2 e.apply
-Proof.
-move => e. elim.  done. intros.  simpl in *. *)
 
 Lemma MUE_no_step : forall e, MUE e -> no_estep e. 
 move => e. elim. intro. intros. intro. inversion H. 
@@ -808,21 +257,11 @@ intros. apply/negP.  intro. apply (negP H0). apply x. apply H1. clear H0.
 elim : e sigma v H;intros;simpl in *. rewrite /= inE in H0. rewrite /= inE.  apply/eqP. apply H. lia. 
 rewrite /= inE in H0.  done.
 move : H1.  move/imfsetP=> H'.  destruct H'. simpl in *. rewrite /= !inE in H1. split_and. 
-apply/imfsetP. exists v.+1. simpl in *. rewrite /= inE.  split_and. destruct x.   done. simpl in *. subst. move : H3.  asimpl. intros. apply : H. instantiate (1 := (0 .: sigma >> succn)).  2 : {    simpl in *. done. } apply inject2. done. done. apply : H. 2 : { eauto. } done. 
+apply/imfsetP. exists v.+1. simpl in *. rewrite /= inE.  split_and. destruct x.   done. simpl in *. subst. move : H3.  asimpl. intros. apply : H. instantiate (1 := (0 .: sigma >> succn)).  2 : {    simpl in *. done. } auto. done. apply : H. 2 : { eauto. } done. 
 move : H1. rewrite !big_map !big_exists. move/hasP=>HH. destruct HH. apply/hasP. exists x. done. apply : H. done. 2 : { eauto.  }  done. 
 Qed.
 
 
-(*Lemma inject_in : forall e sigma v, v \in endpoint_fv e -> (forall n, v \notin  endpoint_fv (sigma n)) -> v \notin endpoint_fv (e ⟨e sigma ⟩). 
-Proof.
-intros.   suff : sigma v \in endpoint_fv (⟨e sigma ⟩ e) -> v \in endpoint_fv e. 
-intros. apply/negP.  intro. apply (negP H0). apply x. apply H1. clear H0. 
-elim : e sigma v H;intros;simpl in *. rewrite /= inE in H0. rewrite /= inE.  apply/eqP. apply H. lia. 
-rewrite /= inE in H0.  done.
-move : H1.  move/imfsetP=> H'.  destruct H'. simpl in *. rewrite /= !inE in H1. split_and. 
-apply/imfsetP. exists v.+1. simpl in *. rewrite /= inE.  split_and. destruct x.   done. simpl in *. subst. move : H3.  asimpl. intros. apply : H. instantiate (1 := (0 .: sigma >> succn)).  2 : {    simpl in *. done. } apply inject2. done. done. apply : H. 2 : { eauto. } done. 
-move : H1. rewrite !big_map !big_exists. move/hasP=>HH. destruct HH. apply/hasP. exists x. done. apply : H. done. 2 : { eauto.  }  done. 
-Qed.*)
 
 
 Lemma inotine2 : forall g i sigma, (forall n, i \notin  endpoint_fv (sigma n)) -> i \notin endpoint_fv g [e sigma].
@@ -832,8 +271,6 @@ apply/imfsetP=>/=H'. destruct H'. rewrite !inE in H1.  destruct (andP H1). move 
 done.
 rewrite !big_map !big_exists. apply/negP. move/hasP=>HH. destruct HH. apply/negP. apply : H. eauto. eauto. done. 
 Qed.
-
-Search "econtractive2_subst".
 
 
 Lemma econtractive2_ren : forall g sigma, injective sigma -> (forall n, n <= sigma n) ->  econtractive2  g -> econtractive2 g ⟨e sigma ⟩.
@@ -865,10 +302,6 @@ Proof.
 elim;rewrite //=;intros. 
 - case_if.  
   * simpl. split_and. simpl. split_and. 
-(*    apply eguarded_fv.  apply : inj_rem5. instantiate (1 := (1.:ids)).  instantiate (1 := (2.:ids)). 
-    asimpl. apply inj_rem4'. 
-    apply eguarded_fv2 in H0. rewrite /= H0. intros. rewrite /= inE in H1. rewrite /= (eqP H1). done. done. apply econtractive2_subst. done.
-    case. done. simpl in *. intros. done.*)
 - rifliad; try done. 
   simpl. 
   done. 
@@ -934,13 +367,6 @@ apply : H.
 apply : H1. 
 lia. 
 simpl in *. rewrite /= inE in H1. done. 
-(*move : H1. move/imfsetP=> HH. simpl in *. destruct HH. rewrite /= inE in H1. split_and. 
-apply/imfsetP. exists n.+1. simpl in *. rewrite /= !inE.  split_and. subst. destruct x. done. simpl in *.  apply :H.  
-apply : fv_aux.   Print scons. apply H3. simpl in *. done. eauto. 
-Search _ gType_fv. 
-simpl in *
-rewrite /= inE //= in H1. *)
-
 intros. 
 move : H0. 
 rewrite /=. 
@@ -1038,7 +464,7 @@ simpl in *.
 split_and. 
 Qed. 
 
-Lemma spred_proj : forall g p, spred g -> esize_pred (project g p). 
+Lemma spred_proj : forall g p, size_pred g -> esize_pred (project g p). 
 Proof.
 elim;intros. 
 rewrite /=. 
@@ -1121,24 +547,7 @@ exists g. done. done.
 rewrite /= inE. done.
 Qed. 
 
-(*Lemma guarded_proj : forall g p i, guarded i g -> eguarded i (project g p).
-Proof.
-elim;intros; try done.
-nnmmsimpl in *. case_if.  simpl in *. apply H. done.
-done.
-simpl in *. case_if. done. case_if. done. *)
-
-
-
-(*Lemma no_step_lt2 : forall g (r1 r2 : gType -> Prop ), (forall g, r1 g -> r2 g) -> paco1 no_step_f r1 g -> paco1 no_step_f r2 g.
-Proof.
-pcofix CIH.  intros. pfold. punfold H1. inversion H1. subst. constructor. done.
-subst.  apply no_step2. inversion H.  right. apply : CIH. eauto. done. right. apply : CIH. 
-eauto. 
-
-done. subst. *)
-
-Lemma step_cont : forall g l g', step g l g' -> contractive2 g.
+(*Lemma step_cont : forall g l g', step g l g' -> contractive2 g.
 Proof.
 move => g l g'. elim;intros.
 simpl in *. unlock gpred in H. simpl in *. split_and. 
@@ -1146,251 +555,183 @@ simpl in *. unlock gpred in H. simpl in *. split_and.
 simpl in *. unlock gpred in H. simpl in *. split_and. 
 simpl in *. unlock gpred in H. simpl in *. split_and. 
 simpl in *. unlock gpred in H. simpl in *. split_and. 
-Qed. 
-
-(*Lemma estep_cont : forall g l g', Estep g l g' -> econtractive2 g.
-Proof.
-move => g l g'. elim;intros.
-simpl in *. unlock epred in H. simpl in *. split_and. 
-simpl in *. unlock epred in H. simpl in *. split_and. 
-simpl in *. unlock epred in H. simpl in *. split_and. 
-simpl in *. unlock epred in H. simpl in *. split_and. 
-simpl in *. unlock epred in H. simpl in *. split_and. 
 Qed. *)
 
 
 
 
-(*Lemma eguarded_NG : forall g i , ~ eguarded i g -> no_estep g. 
+Definition preds (A : eqType) (l : seq (pred A)) : pred A := (foldr predI predT l).
+
+Definition lpreds := locked preds.
+
+
+Notation gpred := (lpreds (linear::size_pred::nil)). 
+Notation epred := (lpreds (econtractive2::esize_pred::nil)).
+
+(*Lemma bound_subst : forall g sigma i, (forall v, v \in gType_fv g -> bound_i i (sigma v)) -> bound_i i (g [g sigma]).
 Proof.
-elim;intros. 
-simpl in *. intro.  intros. intro. inversion H0. done.
-intro. intros. intro. apply : H. simpl in H0.  eauto. inversion H1. subst. 
-simpl in *.
+elim;intros;simpl in *. apply H.  rewrite !inE. auto. 
+done. 
+asimpl. apply H.  intros. *)
 
-done.
 
-Lemma NG_subst : forall g i (sigma : nat -> endpoint) , ~ eguarded i g -> (forall n, no_estep (sigma n)) ->  no_estep (g [e sigma ]). 
+Lemma linear_sgmsg : forall a u g0, Linear (GMsg a u g0) -> Linear g0.
+Proof. 
+move => a u g0. rewrite /Linear /=.  intros. move : (H (a::aa_p) a0 aa a1). rewrite cat_cons /=. 
+  destruct ( aa_p ++ a0 :: rcons aa a1) eqn:Heqn. case : aa_p H0 Heqn.  done. done.
+  intros. have : Tr ((a::aa_p ++ (a0::aa) ++ [::a1])) (GMsg a u g0). auto.  move/H2 => H3.  move : (H3 H1). 
+  move => [] mi [] mo. intros. auto. 
+Qed.
+Check Forall. 
+Lemma linear_branch_aux : forall a gs, Linear (GBranch a gs) -> Forall Linear gs.  
 Proof.
-elim;intros.  
-simpl in *. done.
-done.
-simpl in *. asimpl.  rewrite /no_estep.  intros. intro. inversion H2. subst. 
-have :  ([e(ERec ([eEVar 0 .: sigma >> ⟨e ↑ ⟩] e))..] ([eEVar 0 .: sigma >> ⟨e ↑ ⟩] e))  =
- [eERec ([eEVar 0 .: sigma >> ⟨e ↑ ⟩] e) .: sigma] e. asimpl. done. intros. rewrite x in H5.
-clear x.  
-
-apply : H5. } case. simpl in *.
+move => a gs. intros. apply/List.Forall_forall. intros. rewrite /Linear. intros. unfold Linear in H. have : Tr (a::aa_p ++ a0::aa ++ ([::a1])) (GBranch a gs). move : H0.  move/In_in. move/nthP=>Hnth. specialize Hnth with GEnd. destruct Hnth. rewrite -H3 in H1. apply : TRBranch. eauto. apply : H1. 
+intros. apply : H. rewrite -cat_cons in x0. apply : x0. done. 
+Qed.
 
 
+Lemma linear_branch : forall a gs n, Linear (GBranch a gs) -> n < size gs -> Linear (nth GEnd gs n).
+Proof. intros. apply linear_branch_aux in H. move : H. move/Forall_forall=> HH.  intros. apply HH.  apply/mem_nth. done. 
+Qed. 
 
- apply Hinver
+Hint Resolve mem_nth.
 
+Lemma linear_unf : forall g, Linear (GRec g) ->  Linear (unfg g).
+Proof.  
+move => g. rewrite /Linear. move => HH aap a0 aa a1 H0 H1.  apply : HH. constructor. eauto. done. 
+Qed.
 
-
-
-
-
-(forall n,  NoStep (sigma n)) ->  NoStep (g [g sigma]).
-Proof.
-pcofix CIH. intros.
-inversion H0. 
-simpl in *. pfold.  constructor. intro. intros. intro. inversion H2. simpl in *. specialize H1 with n.  
-apply no_step_lt.
-apply : H1. done.
-
-
-
-zx
-intros g sig H.  elim : H sig. 
-intros. 
-simpl in *. intro.  intros. intro.  inversion H0. 
-intros.  simpl in *. done. 
-intros. simpl in *. asimpl. 
-rewrite /no_step.  intros. intro. inversion H2. subst. 
-
-have : ([gGRec ([gvar 0 .: sig >> ⟨g ↑ ⟩] g0) .: var] ([gvar 0 .: sig >> ⟨g ↑ ⟩] g0)) =
-[gGRec ([gvar 0 .: sig >> ⟨g ↑ ⟩] g0) .: sig] g0.
-asimpl. done. intros. rewrite x in H5. 
-clear x. apply : H0. 2 : { eapply H5. } intros.  destruct n.  simpl in *. 
-rewrite /no_step. intros. intro. 
-
-2 : { simpl in *. done. }
-
- case. simpl in *.
-
-inversion H2.  subst.
-
- eapply  H5. 
-
-apply H0. 
-*)
-
-
-Lemma step_test : forall g l g', step g l g' -> gpred g -> 
+Lemma step_test : forall g l g', step g l g' -> Linear g /\ size_pred g -> 
 Estep (project g (ptcp_from l.1)) (Sd,action_ch l.1,l.2) (project g' (ptcp_from l.1)).
 Proof. move => g l g'. elim.
-- intros. rewrite /= eqxx. constructor. (*  
- rewrite  /epred. rewrite /gpred in H.  unlock preds. unlock preds in H. simpl in *. split_and. 
-  * apply cont_project. 
-  * apply bound_proj. done. 
-  * apply spred_proj.  done.*)
+- intros. rewrite /= eqxx. constructor.
 
 - intros. rewrite /= ?eqxx. erewrite <- (@nth_map _ _ _ EEnd (fun g => project g (ptcp_from a))).    apply estep_branch.
-  rewrite size_map.  done.  done. 
-(*
-  rewrite  /epred. rewrite /gpred in H.  unlock preds. unlock preds in H. simpl in *. split_and. 
-  * rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply cont_project. 
-    rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply/bound_proj. apply (allP H). done.
-    rewrite /= size_map. done. rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply/spred_proj. 
-    apply (allP H8).  done. rewrite /= size_map. done. done.
-*)
+  rewrite size_map.  done.  done.  
 
-- intros. move : H2. move/[dup]. intros. rewrite !inE in H2.  
-
-rewrite /=. 
-  split_and. rewrite [_ == ptcp_to a]eq_sym. rewrite (negbTE H5).
+- intros. move : H2. intros. rewrite !inE in H1.  
+  rewrite /=. split_and. rewrite [_ == ptcp_to a]eq_sym. rewrite (negbTE H3).
   rifliad.
  * constructor. 
-  * apply H1.  move : H3. rewrite /gpred.  unlock preds. rewrite /=. split_and. 
-    apply/eqP. rewrite neg_sym.  apply : distinct_ch_msg.  eauto. eauto. 
-  * apply H1.   move : H3. rewrite /gpred.  unlock preds. rewrite /=. split_and.
-- intros. rewrite /=. move : H3. move/[dup]. move=>H3 Hdup.   rewrite !inE in H3. split_and. rewrite eq_sym. rifliad.
+  * apply H0. move : H2. rewrite /=. split_and. Check linear_sgmsg. apply : linear_sgmsg. eauto. 
+    apply/eqP. rewrite neg_sym.  apply : distinct_ch_msg. apply : GR3.   eauto. rewrite !inE. split_and. 
+    move : H2. rewrite /gpred.  unlock preds. rewrite /=. split_and.
+    move : H2. rewrite /gpred.  unlock preds. rewrite /=. split_and.
+    apply/linearP.  eauto. rewrite !inE. split_and.
+    apply H0. 
+    move : H2. rewrite /gpred.  unlock preds. rewrite /=. split_and. 
+    split_and. apply : linear_sgmsg. eauto. 
+(*use size and linear assumption*)
+- intros. rewrite /=. rewrite !inE in H2. split_and. rewrite eq_sym. rifliad.
  * constructor.
   * rewrite !size_map.  done. 
-  * apply/forallzipP. rewrite !size_map.  done. intros. simpl. rewrite size_map in H7.  repeat erewrite nth_map.  move : H2.  move/forallzipP. simpl. move => HH. 
-    apply : HH. done.  done.  move : H4. rewrite /gpred.  unlock preds. rewrite /=. split_and. 
-    apply (allP H2). apply/mem_nth. done. 
-    apply (allP H4). apply/mem_nth. done. 
-    apply (allP H15). apply/mem_nth. done. 
-    apply (allP H14). apply/mem_nth. done. 
-    apply (allP H13). apply/mem_nth. done. 
-    rewrite -H0.  done.  done. 
-    apply/eqP. rewrite neg_sym.  apply : distinct_ch_branch.  eauto. eauto. 
- * move : H7. move/eqP=> HH. rewrite HH eqxx in H5.  done. 
- * rewrite !match_n.  move : H2. move/forallzipP. simpl. move => HH. apply HH.   done. move : H. rewrite /gpred. unlock preds. simpl.  split_and. 
-   move : H4. rewrite /gpred.  unlock preds. simpl. split_and.
-      apply (allP H2). apply/mem_nth. done. 
-    apply (allP H4). apply/mem_nth. done. 
-    apply (allP H15). apply/mem_nth. done. 
-    apply (allP H14). apply/mem_nth. done. 
-    apply (allP H13). apply/mem_nth. done. 
+  * apply/forallzipP. rewrite !size_map.  done. intros. simpl. rewrite size_map in H7.  repeat erewrite nth_map.  move : H1. move/forallzipP. simpl. move => HH. 
+    apply : HH. done.  done.  split_and. apply : linear_branch.  eauto. done. simpl in *. split_and. 
+    apply (allP H8). apply/mem_nth. done. 
+    rewrite -H. auto. auto.
+    apply/eqP. rewrite neg_sym.  apply : distinct_ch_branch.  eauto. apply GR4. apply H. done.  rewrite !inE. split_and. 
+    move : H3. rewrite /gpred.  unlock preds. simpl. split_and.
+    apply/linearP.   move : H3. rewrite /gpred.  unlock preds. simpl. split_and.
+    rewrite !inE.  split_and. 
+ * move : H7. move/eqP=> HH. rewrite HH eqxx in H4.  done. 
+ * rewrite !match_n.  move : H1. move/forallzipP. simpl. move => HH. apply HH.   done. simpl in *.   split_and. 
+  split_and. apply linear_branch_aux in H2. move : H2. move/Forall_forall => HH2.  intros. apply HH2. apply/mem_nth.  simpl in *. split_and. 
+  simpl in *. split_and.  apply (allP H8). auto. 
 
-- intros. simpl in *. case_if. constructor. 
+- intros. simpl in *. case_if. constructor. have :  Linear (unfg g0) /\ size_pred (unfg g0). split. apply/linear_unf. split_and.  
+  apply size_pred_subst. case. simpl. split_and. done. split_and. move/H0. rewrite project_subst /unfe.
 
- * rewrite /epred. unlock preds. rewrite /gpred in H. unlock preds in H. simpl in *. split_and. 
-   apply cont_project. apply bound_proj. done. apply spred_proj. done.
-   rewrite project_subst in H1. 
-   simpl in *.
+have : (project g0 (ptcp_from l0.1))[(GRec g0 .:  succn >> var) >> project^~ (ptcp_from l0.1)] =
+ ([e(ERec (project g0 (ptcp_from l0.1))).: succn >> EVar] (project g0 (ptcp_from l0.1))).
+asimpl. f_equal. fext. case. asimpl. rewrite /= H2.  done. intros. asimpl. simpl in *. done.
+move => ->.  done. move => x0 x1. destruct x0,x1; try done. simpl.  case. move=>->. done. 
+rewrite project_subst in H0. move : H0. asimpl. rewrite /= H2. intros. 
+have:  [eEEnd .:succn >> (var >> project^~ (ptcp_from l0.1))] = [eEEnd .: succn >> ids]. fext. case;try done. intros. 
+rewrite x in H0. 
 
-have : (project g0 (ptcp_from l0.1))[(GRec g0 .: var) >> project^~ (ptcp_from l0.1)] =
- ([e(ERec (project g0 (ptcp_from l0.1)))..] (project g0 (ptcp_from l0.1))).
-asimpl. f_equal. fext. case. asimpl. rewrite /= H3.  done. intros. asimpl. simpl in *. done.
-intros. rewrite /= -x. apply H1. 
-  move : H2. rewrite /gpred. unlock preds. simpl. split_and. 
-  apply contractive2_subst. done. case. simpl.  split_and. intros. simpl.  done. 
-  
-  apply bound_subst. 
- Search _ (bound_i _ (_ [g _])). 
-done. intro. intros. destruct x1,x2;try done.  f_equal. simpl in *. inversion H1. done. 
-rewrite project_subst in H1. move : H1. asimpl. rewrite /= H2. intros. 
-have:  [eEEnd .: var >> project^~ (ptcp_from l0.1)] = [eEEnd .: ids]. fext. case;try done. intros.
-rewrite x in H1. 
-clear x.  apply estep_cont in H1 as HH. exfalso. apply : MUE_no_step. apply : MUE1. have: ~ eguarded 0 (project g0 (ptcp_from l0.1)).  lia. intros. apply : x. 2 : {  eapply H1. } simpl in *. done.
-
-intro. intros. destruct x1,x2. done. simpl in *. done. simpl in *. done. f_equal. simpl in *. inversion H1.  done.
+clear x.   exfalso. apply : MUE_no_step. apply : MUE1. have: ~ eguarded 0 (project g0 (ptcp_from l0.1)).  lia. intros. apply : x. 2 : {  eapply H0. split.  apply linear_unf. split_and. apply size_pred_subst.   case. simpl. split_and. done. split_and. } simpl in *. done.
+intro. destruct x1,x2;try done.  simpl. case. move=>->. done. 
+Grab Existential Variables.
+all : repeat constructor. 
 Qed.
 
-Lemma step_test2 : forall g l g', step g l g' ->
+Locate size_pred.
+
+
+Ltac ssa := simpl in *; split_and;try done.
+Lemma action_pred_ren : forall g sigma, action_pred g -> action_pred (g ⟨g sigma⟩).
+Proof.  
+elim;intros;rewrite /=.  done. done. asimpl. apply H. done. ssa. ssa. 
+rewrite all_map. apply/allP. intro.  intros. simpl.  apply H. done. apply (allP H2). done. 
+Qed. 
+
+Lemma action_pred_subst : forall g sigma, (forall v, action_pred (sigma v)) ->  action_pred g -> action_pred (g [g sigma]).
+Proof.  
+elim;intros;rewrite /=.  done. done. asimpl. apply H. case. done. intros. simpl. asimpl.  auto. 
+apply action_pred_ren. done.  done. ssa.  ssa.
+rewrite all_map. apply/allP. intro.  intros. simpl.  apply H. done.  done. apply (allP H3). done. 
+Qed.
+
+
+Lemma step_test2 : forall g l g', step g l g' -> Linear g /\ size_pred g /\ action_pred g -> 
 Estep (project g (ptcp_to l.1)) (Rd,action_ch l.1,l.2) (project g' (ptcp_to l.1)).
 Proof. move => g l g'. elim.
-- intros. rewrite /= eqxx. case_if. rewrite /gpred in H. unlock preds in H. simpl in *. split_and. rewrite neg_sym H0 in H5. done. 
-  constructor.  
- rewrite  /epred. rewrite /gpred in H.  unlock preds. unlock preds in H. simpl in *. split_and. 
-  * apply cont_project. 
-  * apply bound_proj. done. 
-  * apply spred_proj.  done.
+- intros. rewrite /= eqxx. case_if. split_and. simpl in *. split_and.  rewrite eq_sym H0 in H3. done. constructor. 
 
-- intros. rewrite /= ?eqxx. erewrite <- (@nth_map _ _ _ EEnd (fun g => project g (ptcp_to a))).    
+- intros. rewrite /= ?eqxx. erewrite <- (@nth_map _ _ _ EEnd (fun g => project g (ptcp_to a))).  
 
-  case_if. rewrite /gpred in H. unlock preds in H. simpl in *. split_and. rewrite neg_sym H1 in H4. done.  
-  apply estep_branch. 
+  case_if. simpl in *. split_and. rewrite eq_sym H1 in H4. done.
 
-  rewrite  /epred. rewrite /gpred in H.  unlock preds. unlock preds in H. simpl in *. split_and. 
-  * rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply cont_project. 
-    rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply/bound_proj. apply (allP H). done.
-    rewrite /= size_map. done. rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply/spred_proj. 
-    apply (allP H9).  done. rewrite /= size_map. done. done.
+  apply estep_branch.
+  rewrite size_map.  done.  done.  
 
-
-- intros. move : H2. move/[dup]. intros. rewrite !inE in H2.  
-
-rewrite /=. 
-  split_and. rewrite neg_sym in H4. rewrite neg_sym in H5.   rewrite  (negbTE H5). 
+- intros. move : H2. intros. rewrite !inE in H1.  
+  rewrite /=. split_and. rewrite [_ == ptcp_to a]eq_sym. rewrite (negbTE H4).
   rifliad.
  * constructor. 
-  * rewrite /epred. rewrite /gpred in H. unlock preds. unlock preds in H. simpl in *. split_and. 
-    ** apply cont_project. 
-    ** apply bound_proj. done. 
-    ** apply spred_proj.  done.
+  * apply H0. simpl in *. split_and. apply : linear_sgmsg. eauto. 
+    apply/eqP. rewrite neg_sym.  apply : distinct_ch_msg. apply : GR3.   eauto. rewrite !inE. split_and. 
+    move : H2.  rewrite //=. eauto.  
+    rewrite !inE. split_and. 
+    apply H0. split_and.
+    apply : linear_sgmsg.  eauto. 
+    move : H5.  rewrite //=. 
+    split_and. 
 
-    auto. apply/eqP. rewrite neg_sym.  apply : distinct_ch_msg.  eauto. eauto. 
-
-- intros. rewrite /=. move : H3. move/[dup]. move=>H3 Hdup.   rewrite !inE in H3. split_and. rewrite eq_sym. rifliad.
+- intros. rewrite /=. rewrite !inE in H2. split_and. rewrite eq_sym. rifliad.
  * constructor.
+  * rewrite !size_map.  done. 
+  * apply/forallzipP. rewrite !size_map.  done. intros. simpl. rewrite size_map in H8.  repeat erewrite nth_map.  move : H1. move/forallzipP. simpl. move => HH. 
+    apply : HH. done.  done.  split_and. apply : linear_branch.  eauto. done. simpl in *. split_and. 
+    apply (allP H10). apply/mem_nth. done.
+    ssa. apply (allP H9). auto. rewrite -H.  done.  done. 
+    apply/eqP. rewrite neg_sym.  apply : distinct_ch_branch.  eauto. apply GR4. apply H. done.  rewrite !inE. split_and.  ssa. ssa.
+    rewrite !inE.  ssa. 
+ * move : H8. move/eqP=> HH. rewrite HH eqxx in H5.  done. 
+ * rewrite !match_n.  move : H1. move/forallzipP. simpl. move => HH. apply HH.   done. simpl in *.   split_and. 
+  split_and. apply linear_branch_aux in H2. move : H2. move/Forall_forall => HH2.  intros. apply HH2. apply/mem_nth.  simpl in *. split_and. 
+  simpl in *. split_and.  apply (allP H10). auto. ssa. apply (allP H9).  auto. 
 
-  rewrite  /epred. rewrite /gpred in H.  unlock preds. unlock preds in H. simpl in *. split_and. 
-  * rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply cont_project. 
-    rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply/bound_proj. apply (allP H). done.
-    rewrite /= size_map. done. rewrite /= all_map. apply/allP. intro. intros. rewrite /=. apply/spred_proj. 
-    apply (allP H13).  done. 
+- intros. simpl in *. auto. case_if. constructor. have :  Linear (unfg g0) /\ size_pred (unfg g0) /\ action_pred (unfg g0). split. apply/linear_unf. split_and.  
+  ssa.  apply size_pred_subst. case. simpl. done. split_and. done. Locate size_pred_subst. apply action_pred_subst. case. done. done. done. move/H0. rewrite project_subst /unfe.
 
-
-
-
-
- auto. rewrite !size_map. done. apply/Forall_forall. move => x. 
-   move/nthP=>HH. specialize HH with (EEnd,EEnd). destruct HH. 
- move : H6.  rewrite size_zip !size_map  H0 minnE nat_fact. intros. 
- rewrite nth_zip in H7. rewrite -H7 /=. 
-   repeat erewrite (@nth_map _ GEnd _ EEnd (fun g => project g (ptcp_to l0.1))).  
-   move : H2. move/Forall_forall=>Hall;intros. specialize Hall with (nth (GEnd,GEnd) (zip gs gs') x0).
-   rewrite nth_zip in Hall. simpl in Hall. apply Hall. rewrite -nth_zip. apply/mem_nth. rewrite size_zip minnE H0.
-   have : size gs' - (size gs' - size gs') = size gs' by lia. move=>->. done. done. all: try done.  
-   rewrite /= H0. done. 
-   rewrite /= !size_map. done.
-
- * apply/eqP. rewrite neg_sym. apply : distinct_ch_branch. eauto. eauto.  
-   rewrite neg_sym H6 in H5.    done. 
-
- * rewrite !match_n.
-   move : H2. move/Forall_forall=>Hall. specialize Hall with (nth (GEnd,GEnd) (zip gs gs') 0). 
-   rewrite nth_zip in Hall. simpl in Hall. apply Hall. rewrite -nth_zip. apply/mem_nth. rewrite size_zip minnE H0.
-   have : size gs' - (size gs' - size gs') = size gs' by lia. move=>->. simpl in H4. 
-   rewrite /gpred in H. unlock preds in H. simpl in *.  split_and. rewrite /= -H0. done. done. done.
-
-- intros. simpl in *. case_if. constructor. 
-
- * rewrite /epred. unlock preds. rewrite /gpred in H. unlock preds in H. simpl in *. split_and. 
-   apply cont_project. apply bound_proj. done. apply spred_proj. done.
-
-
-
-  rewrite project_subst in H1. 
-simpl in *.
-
-
-have : (project g0 (ptcp_to l0.1))[(GRec g0 .: var) >> project^~ (ptcp_to l0.1)] =
- ([e(ERec (project g0 (ptcp_to l0.1)))..] (project g0 (ptcp_to l0.1))).
+have : (project g0 (ptcp_to l0.1))[(GRec g0 .:  succn >> var) >> project^~ (ptcp_to l0.1)] =
+ ([e(ERec (project g0 (ptcp_to l0.1))).: succn >> EVar] (project g0 (ptcp_to l0.1))).
 asimpl. f_equal. fext. case. asimpl. rewrite /= H2.  done. intros. asimpl. simpl in *. done.
-intros. rewrite /= -x. done. intro. intros. destruct x1,x2;try done.  f_equal. simpl in *. inversion H1. done. 
-rewrite project_subst in H1. move : H1. asimpl. rewrite /= H2. intros. 
-have:  [eEEnd .: var >> project^~ (ptcp_to  l0.1)] = [eEEnd .: ids]. fext. case;try done. intros.
-rewrite x in H1. 
-clear x.  apply estep_cont in H1 as HH. exfalso. apply : MUE_no_step. apply : MUE1. have: ~ eguarded 0 (project g0 (ptcp_to l0.1)).  lia. intros. apply : x. 2 : {  eapply H1. } simpl in *. done.
+move => ->.  done. move => x0 x1. destruct x0,x1; try done. simpl.  case. move=>->. done. 
+rewrite project_subst in H0. move : H0. asimpl. rewrite /= H2. intros. 
+have:  [eEEnd .:succn >> (var >> project^~ (ptcp_to l0.1))] = [eEEnd .: succn >> ids]. fext. case;try done. intros. 
+rewrite x in H0. 
 
-intro. intros. destruct x1,x2. done. simpl in *. done. simpl in *. done. f_equal. simpl in *. inversion H1.  done.
+clear x.   exfalso. apply : MUE_no_step. apply : MUE1. have: ~ eguarded 0 (project g0 (ptcp_to l0.1)).  lia. intros. apply : x. 2 : {  eapply H0. split.  apply linear_unf. split_and. ssa. apply size_pred_subst.   case. simpl. split_and. done. split_and. 
+apply action_pred_subst. case.  done.  done.  done. }
+ simpl in *. done.
+intro. destruct x1,x2;try done.  simpl. case. move=>->. done. 
+Grab Existential Variables.
+all : repeat constructor. 
 Qed.
+
+
 
 
 
@@ -1417,25 +758,34 @@ Qed. *)
 
 
 
-Lemma project_tw0 : forall g p0 p1, lpreds ([::apred;spred;ppred;npred p0;npred p1]) g -> project g p0 = project g p1.  
+Lemma project_tw0 : forall g p0 p1,size_pred g ->  p0 \notin  g -> p1 \notin g -> project g p0 = project g p1.  
 Proof.
 elim; rewrite /=;intros;try done. 
 
-erewrite H;eauto. cc. 
-list_lpreds [::3;4] H0. rewrite /= !inE. split_and.
-rewrite (negbTE H3) (negbTE H4) (negbTE H6) (negbTE H7). apply H. cc.
-list_lpreds [::3;4] H0. rewrite /= !inE. split_and.
-rewrite (negbTE H3) (negbTE H4) (negbTE H6) (negbTE H7) !match_n.  apply H. cc. cc. 
+erewrite H;eauto.
+move : H1 H2.   rewrite /= !inE /=. ssa. 
+rewrite (negbTE H1). rewrite (negbTE H7). 
+rewrite (negbTE H2). rewrite (negbTE H5).  apply H. eauto.  eauto.  eauto. 
+move : H1 H2.   rewrite /= !inE /=. ssa. 
+rewrite (negbTE H1). rewrite (negbTE H7). 
+rewrite (negbTE H2). rewrite (negbTE H5).  
+rewrite !match_n.  apply H. auto. apply (allP H8). apply/mem_nth. done. 
+apply/negP.  intro. apply (negP H6). rewrite big_exists. 
+rewrite has_map. simpl. 
+apply/hasP.  simpl. exists (nth GEnd l 0). apply/mem_nth. done. done. 
+apply/negP.  intro. apply (negP H4). rewrite big_exists. 
+rewrite has_map. simpl. 
+apply/hasP.  simpl. exists (nth GEnd l 0). apply/mem_nth. done. done. 
 Qed.
 
 
 
 
-Lemma project_predP_aux : forall a gs p i, lpreds rec_pred (GBranch a gs) ->
+Lemma project_predP_aux : forall a gs p i, project_pred (GBranch a gs) /\ size_pred (GBranch a gs) -> 
 p \notin a -> i < size gs  -> unfeq (project (nth GEnd gs 0) p) (project (nth GEnd gs i) p).
 Proof. 
-intros. have : project_pred (GBranch a gs) by cc. 
-rewrite /=. split_and. move : H2. move/allP=>Hall. have : (nth GEnd gs i) \in gs by cc. 
+intros. ssa.
+move : H2. move/allP=>Hall. have : (nth GEnd gs i) \in gs. auto. 
 move/Hall=> HH.  rewrite /= big_map in HH.
 
 destruct (p \in (fresh (a `|` \bigcup_(j <- gs) ptcps j) |` (a `|` \bigcup_(j <- gs) ptcps j) `\` a)) eqn : Heqn.
@@ -1443,33 +793,24 @@ apply (allP HH). done.
 
  rewrite !(@project_tw0 _ p (fresh (a `|` \bigcup_(j <- gs) ptcps j) )).
 
-unlock lpreds in H. rewrite /preds in H. simpl in *. split_and. 
 apply (allP HH).
 
 rewrite !inE. done. 
-unlock lpreds in H. rewrite /preds in H. simpl in *. split_and. 
-unlock lpreds. rewrite /preds. simpl in *. split_and. 
-apply (allP H9). apply/mem_nth.  done. apply (allP H8).  apply mem_nth. done.
-apply (allP H7). cc. rewrite /npred.
-move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H11) (negbTE H12) /= in H10. move : H10. move/bigfcupP=>HH'.  apply/negP. intro. apply HH'. exists (nth GEnd gs i). split_and. cc. 
-done. 
 
-move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H11) (negbTE H12) /= in H10. move : H10. move/bigfcupP=>HH'.  rewrite /npred. 
+apply (allP H4). apply/mem_nth.  done. 
+move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H6) (negbTE H7) /= in H2. move : H2. move/bigfcupP=>HH'.  apply/negP. intro. apply HH'. exists (nth GEnd gs i). split_and. done. 
+
+move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H6) (negbTE H7) /= in H2. move : H2. move/bigfcupP=>HH'.  
 rewrite /fresh.  destruct (atom_fresh_for_list (([fset ptcp_from a; ptcp_to a] `|` \bigcup_(j <- gs) ptcps j))) eqn : Heqn. 
 rewrite Heqn. apply/negP. intro. apply n. rewrite !inE. apply/orP. right. rewrite big_exists. apply/hasP. 
-exists (nth GEnd gs i). cc. done.
+exists (nth GEnd gs i). auto. done.
+apply (allP H4). apply/mem_nth.  done. 
+move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H6) (negbTE H7) /= in H2. move : H2. move/bigfcupP=>HH'.  apply/negP. intro. apply HH'. exists (nth GEnd gs 0). split_and. done. 
+move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H6) (negbTE H7) /= in H2. move : H2. move/bigfcupP=>HH'.  
 
-unlock lpreds in H. rewrite /preds in H. simpl in *. split_and. 
-unlock lpreds. rewrite /preds. simpl in *. split_and. 
-apply (allP H9). apply/mem_nth.  done. apply (allP H8).  apply mem_nth. done.
-apply (allP H7). cc. rewrite /npred.
-move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H11) (negbTE H12) /= in H10. move : H10. move/bigfcupP=>HH'.  apply/negP. intro. apply HH'. exists (nth GEnd gs 0). split_and. cc. 
-done. 
-
-move : Heqn. move/negP/negP. rewrite /= !inE. split_and.  rewrite !inE in H0.  split_and.  rewrite (negbTE H11) (negbTE H12) /= in H10. move : H10. move/bigfcupP=>HH'.  rewrite /npred. 
 rewrite /fresh.  destruct (atom_fresh_for_list (([fset ptcp_from a; ptcp_to a] `|` \bigcup_(j <- gs) ptcps j))) eqn : Heqn. 
 rewrite Heqn. apply/negP. intro. apply n. rewrite !inE. apply/orP. right. rewrite big_exists. apply/hasP. 
-exists (nth GEnd gs 0). cc. done.
+exists (nth GEnd gs 0). auto. done.
 Qed.
 
 (*Lemma project_predP_aux2 : forall a gs p i n, lpreds rec_pred (GBranch a gs) ->
@@ -1825,35 +1166,58 @@ done.
 done.
 done.
 Qed. 
+Check list_eq. 
+(*Lemma unfeq_eq_f : forall a0 a1 (f : endpoint -> endpoint), unfeq a0 a1 -> unfeq (f a0) (f a1).
+Proof.
+intros.  funelim (unfeq a0 a1).*)
+(*Lemma list_eq_map : forall (A B : Type) (l0 l1 : seq A) (f : A -> B) l0 l1 f, list_eq unfeq l0 l1 -> list_eq unfeq (map f l0) (map f l1).*)
 
-
-Lemma step_test3 : forall g l g' p, step g l g' ->p \notin l.1 ->
+Lemma step_test3 : forall g l g' p, step g l g' -> project_pred g /\ size_pred g -> p \notin l.1 ->
  unfeq (project g p) (project g' p).
 Proof. 
-move => g l g' p H. elim : H p;intros.
-- simpl in *.
-  rewrite !inE in H0. split_and.  rewrite (negbTE H1) (negbTE H2). rewrite unfeq_refl. done. apply cont_project. 
-  simpl in *.
-  rewrite !inE in H1.  split_and. rewrite (negbTE H2) (negbTE H3) match_n.  apply : project_predP_aux.  rewrite /gpred in H.  unlock preds in H. unlock lpreds.  simpl in *. split_and; eauto. 
-  rewrite /= !inE. split_and. done. 
- 
-- simpl.  rifliad.   simp unfeq. rewrite /= !eqxx /=.  apply H1. done. 
-  simp unfeq. rewrite /= !eqxx /=.  apply H1. done. apply H1. done.
+move => g l g' p H. elim : H p.
+- move => a u g0 p Hp Hn. simpl in *.
+  rewrite !inE in Hn. ssa. rewrite (negbTE H) (negbTE H0). rewrite unfeq_refl. done. apply cont_project. 
+- move => a n gs Hs p Hp Hnp.   simpl in *.
+  rewrite !inE in Hnp.  split_and. rewrite (negbTE H) (negbTE H0) match_n.  apply : project_predP_aux.  ssa. eauto. 
+  rewrite /= !inE. ssa. done. 
 
-- simpl.  rifliad. simp unfeq. rewrite /= !eqxx /=.  
-  move : H2. clear H H1 H3 H5. rewrite /= list_eqP.   elim : gs gs' H0 H4. destruct gs'. simpl in *. intros. done. 
-  done. intros. destruct gs'.  done. simpl in *. split_and. inversion H2.    
-  simpl in *.   apply H5. done. 
-  apply H.  lia. done. inversion H2. done.
-- simp unfeq. rewrite /= !eqxx /=. rewrite /= list_eqP.  
-  move : H2. clear H H1 H3 H5.  elim : gs gs' H0 H4. destruct gs'. simpl in *. intros. done. 
-  done. intros. destruct gs'.  done. simpl in *. split_and. inversion H2.    
-  simpl in *. apply H5.  done.
-  apply H.  lia. done. inversion H2. done. 
-- rewrite /= ! match_n. move : H2. 
-  simpl in *. move/forallzipP=> Hzip. simpl in *. apply Hzip. done. cc. done. apply H1 in H2.
-  simpl in *. case_if. 
- * rewrite project_subst in H2. move : H2.  asimpl. simpl in *.  rewrite /= H3.
+- move => a u l0 g1 g2 Hstep Hunf Hnp p1 HH Hnp1. simpl.  rifliad.   simp unfeq. rewrite /= !eqxx /=.  apply Hunf. ssa. done. 
+  simp unfeq. rewrite /= !eqxx /=.  apply Hunf. ssa. done. apply Hunf. ssa. done. 
+
+- move => a l0 gs gs' Hsize Hf0 Hf1 Hnp p1 HH Hnp1. simpl.  rifliad. simp unfeq. rewrite /= !eqxx /=.  
+  rewrite list_eqP.
+  have : Forall (fun p : gType * gType => unfeq (project p.1 p1) (project p.2 p1))
+          (zip gs gs').
+  apply/Forall_forall. intros. move : Hf1. move/Forall_forall=> HH1.  apply HH1. done. ssa. 
+  move : H0. Search _ (_ \in zip _ _). destruct x. move/in1. simpl. intros. apply (allP H5). done. 
+  move : H0. Search _ (_ \in zip _ _). destruct x. move/in1. simpl. intros. apply (allP H4). done. 
+  done. 
+  clear Hf0 Hf1 HH H Hnp Hnp1. elim : gs gs' Hsize. destruct gs'. simpl in *. intros. done. 
+  done. intros. destruct gs'.  done. simpl in *. split_and. inversion x. subst. 
+  simpl in *.   done. inversion x. subst. simpl in *. apply H. inversion Hsize. done. done. 
+
+ simp unfeq. rewrite /= !eqxx /=.  
+  rewrite list_eqP.
+  have : Forall (fun p : gType * gType => unfeq (project p.1 p1) (project p.2 p1))
+          (zip gs gs').
+  apply/Forall_forall. intros. move : Hf1. move/Forall_forall=> HH1.  apply HH1. done. ssa. 
+  move : H1. destruct x. move/in1. simpl. intros. apply (allP H6). done. 
+  move : H1. destruct x. move/in1. simpl. intros. apply (allP H5). done. 
+  done. 
+  clear Hf0 Hf1 HH H Hnp Hnp1. elim : gs gs' Hsize. destruct gs'. simpl in *. intros. done. 
+  done. intros. destruct gs'.  done. simpl in *. split_and. inversion x. subst. 
+  simpl in *.   done. inversion x. subst. simpl in *. apply H. inversion Hsize. done. done. 
+- rewrite /= ! match_n. move : Hf1. 
+  simpl in *. move/forallzipP=> Hzip. simpl in *. apply Hzip. done. ssa. ssa. 
+  apply (allP H5).  auto.  apply (allP H4). auto.  auto. 
+
+- move => g0 l0 g'0 Hstep Hp p HH Hnp. 
+
+
+
+
+rewrite project_subst in H2. move : H2.  asimpl. simpl in *.  rewrite /= H3.
    have :  ((ERec (project g0 p)) .: var >> project^~ p) = ((ERec (project g0 p)) .: ids).
    fext. case.  simpl in *. done. simpl in *. intros.  done. move =>->. intros.
    apply unfeq_unf.  simpl in *. rewrite H3 /=.  apply cont_project. done.

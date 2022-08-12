@@ -5,7 +5,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-From Dep Require Import NewSyntax Projection.
+From Dep Require Import Projection.
 
 Let inE := NewSyntax.inE.
 
@@ -15,6 +15,9 @@ Let inE := NewSyntax.inE.
 Definition preds (A : eqType) (l : seq (pred A)) : pred A := (foldr predI predT l).
 
 Definition lpreds := locked preds.
+
+Notation gpred := (lpreds (linear::contractive2::(bound_i 0)::rec_pred)). 
+Notation epred := (lpreds (econtractive2::(ebound_i 0)::esize_pred::nil)).
 
 
 Class CHint (b : Prop) : Prop:= { _ : (b : Prop) }.

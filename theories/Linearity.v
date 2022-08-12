@@ -6,10 +6,11 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 From deriving Require Import deriving.
-From Dep Require Export Utils.
-From Dep Require Import NewSyntax Substitutions Structures.
+(*From Dep Require Export Utils. *)
+From Dep Require Export Projection.
 
 Let inE := NewSyntax.inE.
+
 
 
 
@@ -81,11 +82,12 @@ Ltac contra_list := match goal with
 Definition exists_depP  (Pm : seq bool -> Prop) (P : seq action -> Prop) a0 aa a1 := exists m, size m = size aa /\ P (a0::((mask m aa))++[::a1]) /\ Pm m.
 Notation exists_dep := (exists_depP (fun _ => True)).
 
+Notation unfg g := (g[g GRec g.:  succn >> var]).
 Inductive Tr : seq action -> gType  -> Prop :=
 | TR_nil G : Tr nil G 
 | TRMsg a u aa g0 : Tr aa g0 -> Tr (a::aa) (GMsg a u g0)
 | TRBranch d a n gs aa  : n < size gs -> Tr aa (nth d gs n) ->  Tr (a::aa) (GBranch a gs)
-| TRUnf aa g : Tr aa (g[g GRec g.:var])  -> Tr aa (GRec g).
+| TRUnf aa g : Tr aa (unfg g)  -> Tr aa (GRec g).
 Hint Constructors Tr.
 
 
@@ -218,8 +220,6 @@ Definition linear (g : gType) := true.
 Lemma linearP : forall g, reflect (Linear g)  (linear g). 
 Admitted.
 
-Notation gpred := (lpreds (linear::contractive2::(bound_i 0)::rec_pred)). 
-Notation epred := (lpreds (econtractive2::(ebound_i 0)::esize_pred::nil)).
 
 
 Unset Elimination Schemes. 
@@ -228,7 +228,7 @@ Inductive step : gType -> label  -> gType -> Prop :=
  | GR2 a n gs : n < size gs -> step (GBranch a gs) (a, inr n) (nth GEnd gs n)
  | GR3 a u l g1 g2 : step g1 l g2 -> ptcp_to a \notin l.1 -> step (GMsg a u g1) l (GMsg a u g2)
  | GR4 a l gs gs' : size gs = size gs' -> Forall (fun p => step p.1 l p.2) (zip gs gs') -> (ptcp_to a) \notin l.1  ->  step (GBranch a gs) l (GBranch a gs')
- | GR_rec g l g' : step g[g (GRec g).: var] l g'  -> 
+ | GR_rec g l g' : step (unfg g) l g'  -> 
                    step (GRec g) l g'.
 (* | GR_rec g l g' g'' :  gpred g -> gpred g'' -> 
                         bisimilar g g'' -> 
@@ -254,7 +254,7 @@ Lemma step_ind
         Forall (fun p => step p.1 l p.2) (zip gs gs') ->  Forall (fun p => P p.1 l p.2) (zip gs gs') -> 
 
         ptcp_to a \notin l.1 -> P (GBranch a gs) l (GBranch a gs')) ->
-       (forall g l g', step g[g (GRec g).: var] l g'  -> P g[g (GRec g).: var] l g' -> P (GRec g) l g') ->
+       (forall g l g', step (unfg g) l g'  -> P (unfg g) l g' -> P (GRec g) l g') ->
        forall (s : gType) (l : label) (s0 : gType), step s l s0 -> P s l s0.
 Proof.
 move => P H0 H1 H2 H3 H4. fix IH 4.
@@ -337,8 +337,7 @@ move => a l. rewrite /=. case : l;first done.
 move => a0 l. rewrite /=. move/andP=> [] H H1. elim : l a a0 H H1.
 - move => a a0. rewrite /=.  case : l1. simpl. rewrite /IO_II. move => _ -> . by rewrite orbC.  
   move => a1 l. rewrite/= /IO_II. by move/andP=> [] ->.
-- move => a l IH a0 a1. rewrite /= /IO_II. move/andP=> [] ->. intros. rewrite /=. 
-  unfold IO_II in IH. apply/IH. done. done.
+- move => a l IH a0 a1. rewrite /= /IO_II. move/andP=> [] ->. intros. rewrite /=.   unfold IO_II in IH. apply/IH. done. done.
 Qed.
 
 Lemma outdep0 : forall l0 l1, outdep (l0 ++ l1) -> if l0 is x::l0' then path IO_OO x l0' else true.
@@ -562,4 +561,3 @@ rewrite /IO_OO in b. case : (orP b).
        destruct l1.  simpl in Heq0.  inversion Heq0.  eapply mem_mask with (m:= x3). rewrite HHeq'. by rewrite mem_cat inE eqxx orbC. simpl in Heq0. 
 inversion Heq0. rewrite mem_cat.  apply/orP. right. rewrite inE. apply/orP. right. eapply mem_mask with (m:=x3). rewrite HHeq'. by  rewrite mem_cat inE eqxx orbC. 
 Qed.
-
